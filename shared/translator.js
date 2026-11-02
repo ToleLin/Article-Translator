@@ -115,6 +115,22 @@
 
   /* ══════════ 原文語言 ══════════ */
 
+  const EN_STOP = new Set(['the', 'of', 'and', 'to', 'in', 'is', 'that', 'for', 'with', 'as', 'by', 'on',
+    'are', 'this', 'we', 'be', 'from', 'an', 'which', 'can', 'at', 'it', 'or', 'was', 'were', 'these', 'our']);
+
+  /** 偵測器不能用時的備案：看字本身（假名→日文、諺文→韓文、漢字為主→中文、英文常用字夠多→英文） */
+  T.guessLang = function (text) {
+    const t = String(text || '').slice(0, 4000);
+    if (/[぀-ヿ]/.test(t)) return 'ja';
+    if (/[가-힯]/.test(t)) return 'ko';
+    const han = (t.match(/[一-鿿]/g) || []).length;
+    const latin = (t.match(/[A-Za-z]/g) || []).length;
+    if (han > latin) return 'zh';
+    const words = t.toLowerCase().match(/[a-z]+/g) || [];
+    if (words.length >= 12 && words.filter((w) => EN_STOP.has(w)).length / words.length > 0.08) return 'en';
+    return null;
+  };
+
   T.ensureSourceLang = async function (sampleText) {
     if (T.sourceLang) return T.sourceLang;
     const s = cfg.getSettings();
@@ -126,11 +142,15 @@
     try {
       const r = await withTimeout(send({ type: 'ai.detect', text: (sampleText || '').slice(0, 1200) }), 5000, '語言偵測');
       lang = r && r.lang;
-    } catch (e) { /* 偵測不出來就當英文 */ }
-    if (!lang && typeof document !== 'undefined' && document.documentElement && document.documentElement.lang) {
+    } catch (e) { /* 偵測器不能用，下面用字來猜 */ }
+    if (!lang) lang = T.guessLang(sampleText);
+    /* 網頁本身標示的語言只在一般網頁上才可信。PDF 檢視器、桌面版的 <html lang> 是「介面」的語言（zh-Hant），
+       拿來當原文語言的話，翻譯引擎會把英文當中文「翻」，原封不動退回來 —— 看起來就像沒翻 */
+    if (!lang && typeof location !== 'undefined' && /^https?:$/.test(location.protocol)
+      && typeof document !== 'undefined' && document.documentElement && document.documentElement.lang) {
       lang = document.documentElement.lang.split('-')[0];
     }
-    T.sourceLang = lang || 'en';
+    T.sourceLang = lang || 'auto';
     return T.sourceLang;
   };
 
@@ -287,6 +307,11 @@
       order = base;
     }
     if (!s.geminiApiKey) order = order.filter((e) => e !== 'gemini');
+    // 桌面版（Electron）沒有 Chrome 內建翻譯；沒列到的線上引擎補在後面當備援
+    if (g.PLDesktop) {
+      order = order.filter((e) => e !== 'chrome');
+      ['google', 'edge'].forEach((e) => { if (!order.includes(e)) order.push(e); });
+    }
     return order.length ? order : ['edge'];
   };
 
@@ -397,24 +422,33 @@
     });
 
     if (bad.length) {
-      try {
-        const r2 = await T.translate(bad.map((i) => texts[i]), { exclude: [res.engine] });
-        bad.forEach((i, n) => {
-          const t = r2.result[n];
-          if (!accept(i, t, r2.engine, true) && t != null && String(t).trim()) {
-            // 兩個引擎都翻不好時，至少給看得到的那一份
-            out[i] = t; engines[i] = r2.engine; done.add(i);
-            if (opts.onItem) { try { opts.onItem(i, t, r2.engine); } catch (e) { /* ignore */ } }
-          }
-        });
-      } catch (e) { /* 沒有其他引擎可用：保留第一個引擎的結果（若有） */ }
+      let r2 = null;
+      try { r2 = await T.translate(bad.map((i) => texts[i]), { exclude: [res.engine] }); }
+      catch (e) { /* 沒有其他引擎可用 */ }
+      const norm = (x) => String(x == null ? '' : x).replace(/\s+/g, ' ').trim();
+      const force = (i, t, eng) => {
+        out[i] = t; engines[i] = eng; done.add(i);
+        T.cachePut(texts[i], lang, t);
+        if (opts.onItem) { try { opts.onItem(i, t, eng); } catch (e) { /* ignore */ } }
+      };
       bad.forEach((i, n) => {
-        if (done.has(i)) return;
-        const t = res.result[need.indexOf(i)];
-        if (t != null && String(t).trim()) {
-          out[i] = t; engines[i] = res.engine; done.add(i);
-          if (opts.onItem) { try { opts.onItem(i, t, res.engine); } catch (e) { /* ignore */ } }
+        const b = r2 ? r2.result[n] : null;
+        if (r2 && accept(i, b, r2.engine, true)) return;
+        const a = res.result[need.indexOf(i)];
+        const why = T.checkResult(texts[i], a, lang);
+        // 兩個引擎都原封不動退回：多半是人名、期刊名、參考文獻這種本來就不用翻的 → 照原文
+        if (why === 'untranslated' && norm(a) === norm(texts[i]) && (!r2 || norm(b) === norm(texts[i]))) {
+          force(i, texts[i], 'same');
+          return;
         }
+        // 兩個引擎都翻得很短：可能原文本來就很冗長，取比較完整的那一份
+        if (why === 'truncated' && r2 && T.checkResult(texts[i], b, lang) === 'truncated') {
+          force(i, norm(a).length >= norm(b).length ? a : b, res.engine);
+          return;
+        }
+        /* 其他情況標成失敗（原文照常顯示、可以按「重試失敗段落」），
+           不要把「原封不動的英文」或「只翻一半」的結果蓋上去 —— 那看起來就是少翻了 */
+        out[i] = null;
       });
     }
     out.engines = engines;

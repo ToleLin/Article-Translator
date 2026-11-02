@@ -296,6 +296,29 @@
     });
     $('print').addEventListener('click', () => window.print());
 
+    // 桌面版：不用經過列印視窗，直接存成 PDF 檔
+    if (globalThis.PLDesktop && PLDesktop.savePdf) {
+      const b = document.createElement('button');
+      b.className = 'primary';
+      b.textContent = '直接存成 PDF 檔';
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        status('產生 PDF 中…');
+        try {
+          const r = await PLDesktop.savePdf({ title: payload.title || 'PaperLens' });
+          status(r && r.filePath ? '已存到 ' + r.filePath : '已取消');
+        } catch (e) {
+          status('存檔失敗：' + (e.message || e));
+        }
+        b.disabled = false;
+      });
+      $('print').before(b);
+      $('print').textContent = '列印…';
+      $('print').classList.remove('primary');
+      const hint = document.getElementById('hint');
+      if (hint) hint.textContent = '按「直接存成 PDF 檔」就會存下左右對照的 PDF（含螢光筆底色）；要印到紙上再按「列印…」。';
+    }
+
     if ($('inline').checked) await inlineImages();
     else status('就緒');
   }

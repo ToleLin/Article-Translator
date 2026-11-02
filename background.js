@@ -83,69 +83,14 @@ async function openInViewer(tabId, url, newTab) {
    遠端翻譯引擎（都在 background 呼叫，避開網頁的 CORS 限制）
    ════════════════════════════════════════════════════════════ */
 
-/* ---- 分派 + 自動備援 ---- */
+/* ---- 分派 + 自動備援、AI 解釋：實作在 shared/remote-engines.js（桌面版也用同一份） ---- */
 
-async function remoteTranslate({ engine, texts, sourceLang, targetLang, settings }) {
-  const s = settings || await PL_loadSettings();
-  const order = engine ? [engine] : (s.engineOrder || PL_DEFAULTS.engineOrder);
-  const tried = [];
-  let lastErr = null;
-
-  for (const eng of order) {
-    if (eng === 'chrome') continue;                 // 內建 AI 由呼叫端自己處理
-    if (eng === 'gemini' && !s.geminiApiKey) continue;
-    const tgt = PL_mapLang(eng, targetLang || s.targetLang);
-    const src = (sourceLang && sourceLang !== 'auto') ? PL_mapLang(eng, sourceLang) : 'auto';
-    try {
-      let result;
-      if (eng === 'google') result = await PLRemote.googleTranslate(texts, src, tgt);
-      else if (eng === 'edge') result = await PLRemote.edgeTranslate(texts, src, tgt);
-      else if (eng === 'gemini') result = await PLRemote.geminiTranslate(texts, src, tgt, s.geminiApiKey, s.geminiModel);
-      else continue;
-
-      if (result && result.some((x) => x != null)) return { engine: eng, result };
-      lastErr = new Error(eng + ' 沒有回傳任何譯文');
-    } catch (e) {
-      lastErr = e;
-      tried.push(eng + '：' + (e && e.message || e));
-      if (!s.autoFallback && engine) break;
-    }
-  }
-  throw new Error(tried.length ? tried.join(' ／ ') : (lastErr ? lastErr.message : '沒有可用的翻譯引擎'));
+async function remoteTranslate(msg) {
+  return PLRemote.translate(msg, msg.settings || await PL_loadSettings());
 }
 
-/* ---- 用遠端模型做「AI 解釋」（Chrome 內建不可用時的備援） ---- */
-
 async function remoteExplain(text, context, settings) {
-  const s = settings || await PL_loadSettings();
-  if (!s.geminiApiKey) {
-    throw new Error('這台 Chrome 的內建語言模型無法使用，且尚未設定 Gemini 金鑰。'
-      + '可到設定頁貼上 Google AI Studio 的免費金鑰，或改用「翻譯本段」了解內容。');
-  }
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
-    + encodeURIComponent(s.geminiModel || 'gemini-2.0-flash') + ':generateContent?key=' + encodeURIComponent(s.geminiApiKey);
-
-  let prompt = '你是協助研究生讀論文的助教。用繁體中文說明下面這段文獻在做什麼。\n'
-    + '固定三行：「重點：」一句話講主張或動作；「細節：」最多兩句補方法/數據/條件；'
-    + '「名詞：」列出專有名詞用「英文(中文)」並各給一句解釋，沒有就寫「無」。\n'
-    + '不要開場白，不要重複原文，不要編造。\n\n【片段】\n' + text.slice(0, 6000);
-  if (context && context.title) prompt = '【文獻標題】' + context.title + '\n' + prompt;
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.3 }
-    })
-  });
-  if (!res.ok) throw new Error('Gemini 回應 ' + res.status);
-  const data = await res.json();
-  const out = data && data.candidates && data.candidates[0]
-    && data.candidates[0].content && data.candidates[0].content.parts
-    && data.candidates[0].content.parts.map((p) => p.text || '').join('');
-  if (!out) throw new Error('Gemini 沒有回傳內容');
-  return out;
+  return PLRemote.explain(text, context, settings || await PL_loadSettings());
 }
 
 /* ---- 圖片轉 data URL（匯出 PDF 時內嵌，避免防盜連導致列印缺圖） ---- */

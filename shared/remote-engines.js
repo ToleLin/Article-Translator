@@ -188,7 +188,7 @@
   async function geminiTranslate(texts, src, tgt, apiKey, model) {
     if (!apiKey) throw new Error('尚未在設定頁填入 Gemini API 金鑰');
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
-      + encodeURIComponent(model || 'gemini-2.0-flash') + ':generateContent?key=' + encodeURIComponent(apiKey);
+      + encodeURIComponent(model || g.PL_DEFAULTS.geminiModel) + ':generateContent?key=' + encodeURIComponent(apiKey);
 
     const out = new Array(texts.length);
     for (let i = 0; i < texts.length;) {
@@ -201,8 +201,10 @@
       }
 
       const instruction =
-        '你是學術文獻翻譯員。把 JSON 陣列中每個字串翻成' + tgt + '，保留學術語氣與專有名詞慣用譯法。\n'
-        + '規則：(1) 只輸出 JSON 陣列，長度與輸入完全相同；(2) 不要加說明、不要加 markdown 圍欄。\n\n'
+        '你是學術文獻翻譯員。把 JSON 陣列中每個字串完整翻成' + tgt + '，不可漏句、不可摘要。\n'
+        + '規則：(1) 保留學術語氣，專有名詞用該領域慣用譯法；縮寫（如 q-BIC、EUE、SEM、FDTD）保留原文；'
+        + '(2) 上下標字元（¹²³、₀₁₂）、數字、單位、引用編號照原樣保留在對應位置；'
+        + '(3) 只輸出 JSON 陣列，長度與輸入完全相同；(4) 不要加說明、不要加 markdown 圍欄。\n\n'
         + JSON.stringify(group.map((x) => x.text));
 
       const res = await fetch(url, {
@@ -299,5 +301,71 @@
     return out;
   }
 
-  g.PLRemote = { googleTranslate, edgeTranslate, geminiTranslate };
+  /* ══════════ 分派（擴充功能的 background 與桌面版的主程序共用） ══════════ */
+
+  /**
+   * msg = { engine, texts, sourceLang, targetLang }；engine 留空就依設定的順序備援。
+   * s = 設定（PL_DEFAULTS 合併使用者設定）
+   */
+  async function translate(msg, s) {
+    const order = msg.engine ? [msg.engine] : (s.engineOrder || g.PL_DEFAULTS.engineOrder);
+    const tried = [];
+    let lastErr = null;
+
+    for (const eng of order) {
+      if (eng === 'chrome') continue;                 // 內建 AI 由呼叫端自己處理
+      if (eng === 'gemini' && !s.geminiApiKey) continue;
+      const tgt = g.PL_mapLang(eng, msg.targetLang || s.targetLang);
+      const src = (msg.sourceLang && msg.sourceLang !== 'auto') ? g.PL_mapLang(eng, msg.sourceLang) : 'auto';
+      try {
+        let result;
+        if (eng === 'google') result = await googleTranslate(msg.texts, src, tgt);
+        else if (eng === 'edge') result = await edgeTranslate(msg.texts, src, tgt);
+        else if (eng === 'gemini') result = await geminiTranslate(msg.texts, src, tgt, s.geminiApiKey, s.geminiModel);
+        else continue;
+
+        if (result && result.some((x) => x != null)) return { engine: eng, result };
+        lastErr = new Error(eng + ' 沒有回傳任何譯文');
+      } catch (e) {
+        lastErr = e;
+        tried.push(eng + '：' + (e && e.message || e));
+        if (!s.autoFallback && msg.engine) break;
+      }
+    }
+    throw new Error(tried.length ? tried.join(' ／ ') : (lastErr ? lastErr.message : '沒有可用的翻譯引擎'));
+  }
+
+  /** 用 Gemini 做「AI 解釋」 */
+  async function explain(text, context, s) {
+    if (!s.geminiApiKey) {
+      throw new Error('這台電腦的內建語言模型無法使用，且尚未設定 Gemini 金鑰。'
+        + '可到設定頁貼上 Google AI Studio 的免費金鑰，或改用「翻譯本段」了解內容。');
+    }
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+      + encodeURIComponent(s.geminiModel || g.PL_DEFAULTS.geminiModel) + ':generateContent?key=' + encodeURIComponent(s.geminiApiKey);
+
+    let prompt = '你是協助研究生讀論文的助教。用繁體中文說明下面這段文獻在做什麼。\n'
+      + '固定三行：「重點：」一句話講主張或動作；「細節：」最多兩句補方法/數據/條件；'
+      + '「名詞：」列出專有名詞用「英文(中文)」並各給一句解釋，沒有就寫「無」。\n'
+      + '不要開場白，不要重複原文，不要編造。\n\n【片段】\n' + text.slice(0, 6000);
+    if (context && context.title) prompt = '【文獻標題】' + context.title + '\n' + prompt;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3 }
+      })
+    });
+    if (!res.ok) throw new Error('Gemini 回應 ' + res.status);
+    const data = await res.json();
+    const out = data && data.candidates && data.candidates[0]
+      && data.candidates[0].content && data.candidates[0].content.parts
+      && data.candidates[0].content.parts.map((p) => p.text || '').join('');
+    if (!out) throw new Error('Gemini 沒有回傳內容');
+    return out;
+  }
+
+  g.PLRemote = { googleTranslate, edgeTranslate, geminiTranslate, translate, explain };
 })(globalThis);

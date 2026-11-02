@@ -82,7 +82,8 @@ html { --pl-page-bg: var(--pl-panel); }
 /* 還沒翻好之前完全不蓋原文，讓使用者先看得到內容 */
 .pl-tr:not([data-pl-done]) > .pl-trbg,
 .pl-tr:not([data-pl-done]) > .pl-trtx { display: none; }
-.pl-tr[data-pl-state="pending"] { pointer-events: none; }
+.pl-tr[data-pl-state="pending"],
+.pl-tr[data-pl-state="same"] { pointer-events: none; }
 .pl-tr[data-pl-state="working"] {
   background: linear-gradient(90deg, transparent, rgba(79, 70, 229, .16), transparent);
   background-size: 220% 100%;

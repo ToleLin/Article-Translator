@@ -1,0 +1,60 @@
+# 建置 PaperLens 桌面版（Windows .exe）
+#
+# - 改到桌面版或共用的網頁程式時自動建置；建好的安裝檔在該次執行的「Artifacts」下載
+# - 推 v* 標籤（例如 v0.2.0）時，另外把 .exe 附到 GitHub Releases
+# - 也可以在 Actions 頁面手動按「Run workflow」
+name: 桌面版（Windows）
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+    paths:
+      - 'desktop/**'
+      - 'pdf/**'
+      - 'shared/**'
+      - 'content/**'
+      - 'export/**'
+      - 'options/**'
+      - 'vendor/**'
+      - 'icons/**'
+      - 'manifest.json'
+      - '.github/workflows/desktop.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: desktop
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: 安裝建置工具
+        run: npm ci
+
+      - name: 打包安裝檔與免安裝版
+        run: npm run dist
+
+      - name: 上傳建置結果
+        uses: actions/upload-artifact@v7
+        with:
+          name: PaperLens-Windows
+          path: desktop/dist/*.exe
+          if-no-files-found: error
+
+      - name: 發佈到 Releases（推 v* 標籤時）
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v3
+        with:
+          files: desktop/dist/*.exe

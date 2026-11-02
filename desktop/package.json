@@ -1,0 +1,61 @@
+{
+  "name": "paperlens-desktop",
+  "productName": "PaperLens",
+  "version": "0.2.0",
+  "description": "PaperLens 文獻對照閱讀器 — 桌面版（左原文、右繁中，PDF 版面原樣保留）",
+  "author": "PaperLens",
+  "repository": "https://github.com/ToleLin/Article-Translator",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "prepare-app": "node scripts/prepare.js",
+    "start": "node scripts/prepare.js && electron .",
+    "dist": "node scripts/prepare.js && electron-builder --win --x64 --publish never",
+    "dist:dir": "node scripts/prepare.js && electron-builder --dir --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.10.1",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "tw.paperlens.desktop",
+    "productName": "PaperLens",
+    "copyright": "PaperLens",
+    "files": [
+      "main.js",
+      "preload.js",
+      "package.json",
+      "app/**/*"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PaperLens",
+      "artifactName": "PaperLens-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "PaperLens-Portable-${version}.exe"
+    },
+    "fileAssociations": [
+      { "ext": "pdf", "name": "PDF", "description": "PDF 文件", "role": "Viewer" }
+    ],
+    "linux": {
+      "target": ["dir"],
+      "icon": "build/icon.png"
+    }
+  }
+}

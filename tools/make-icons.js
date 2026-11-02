@@ -116,3 +116,9 @@ for (const size of [16, 32, 48, 128]) {
   fs.writeFileSync(file, png(size, design(size)));
   console.log('寫入', file);
 }
+
+// 桌面版（Windows 安裝檔、工作列）需要至少 256px 的圖示
+const deskDir = path.join(__dirname, '..', 'desktop', 'build');
+fs.mkdirSync(deskDir, { recursive: true });
+fs.writeFileSync(path.join(deskDir, 'icon.png'), png(512, design(512)));
+console.log('寫入', path.join(deskDir, 'icon.png'));

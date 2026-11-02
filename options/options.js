@@ -2,7 +2,8 @@
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
-  const ALL_ENGINES = ['chrome', 'edge', 'google', 'gemini'];
+  // 桌面版沒有 Chrome 內建 AI
+  const ALL_ENGINES = globalThis.PLDesktop ? ['google', 'edge', 'gemini'] : ['chrome', 'edge', 'google', 'gemini'];
 
   let settings = null;
 
@@ -33,7 +34,7 @@
     const list = $('engineOrder');
     list.textContent = '';
 
-    const enabled = settings.engineOrder.slice();
+    const enabled = settings.engineOrder.filter((e) => ALL_ENGINES.includes(e));
     const disabled = ALL_ENGINES.filter((e) => !enabled.includes(e));
     const rows = enabled.map((e) => ({ key: e, on: true }))
       .concat(disabled.map((e) => ({ key: e, on: false })));
@@ -130,8 +131,10 @@
     const lines = [];
     const sample = 'We propose a photonic crystal cavity with a measured quality factor of 1.2 million.';
 
-    // Chrome 內建
-    try {
+    // Chrome 內建（桌面版沒有）
+    if (globalThis.PLDesktop) {
+      lines.push('桌面版沒有 Chrome 內建 AI（那是 Chrome 瀏覽器才有的功能），翻譯改走下面的線上引擎。');
+    } else try {
       const probe = await send({ type: 'ai.probe', sourceLang: settings.sourceLang, targetLang: settings.targetLang });
       const t = probe.translator;
       const map = {

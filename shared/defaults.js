@@ -12,7 +12,7 @@
     engineOrder: ['chrome', 'edge', 'google'], // 依序嘗試，前面失敗自動退到下一個
     autoFallback: true,
     geminiApiKey: '',               // 選用，留空代表不啟用 gemini 引擎
-    geminiModel: 'gemini-2.0-flash',
+    geminiModel: 'gemini-3.6-flash', // gemini-2.0-flash 已在 2026-06-01 停用，官方建議改用 3.6-flash
 
     /* --- 行為 --- */
     autoTranslate: true,            // 開啟對照後自動開始翻譯
@@ -78,9 +78,14 @@
     return t[code] || code;
   }
 
+  /* 已經被 Google 停用的模型：使用者以前存過的設定自動換成目前的預設 */
+  const RETIRED_GEMINI = /^gemini-(1\.0|1\.5|2\.0)(-|$)|^gemini-pro$/;
+
   async function loadSettings() {
     const got = await chrome.storage.local.get('settings');
-    return Object.assign({}, DEFAULTS, got.settings || {});
+    const s = Object.assign({}, DEFAULTS, got.settings || {});
+    if (!s.geminiModel || RETIRED_GEMINI.test(s.geminiModel)) s.geminiModel = DEFAULTS.geminiModel;
+    return s;
   }
 
   async function saveSettings(patch) {

@@ -122,6 +122,7 @@
 
     $('pl-page-total').textContent = String(doc.pdf.numPages);
     $('pl-drop').classList.add('pl-hide');
+    if (globalThis.PLDesktop && PLDesktop.docOpened) PLDesktop.docOpened();
 
     await extractAll();
     layoutPages();
@@ -714,6 +715,12 @@
   function deliver(u, text, engine, force) {
     if (u.delivered && !force) return;
     u.delivered = true;
+    // 引擎認為不用翻（人名、期刊名、參考文獻）：保留原文，不要蓋上一模一樣的英文
+    if (engine === 'same' || String(text).replace(/\s+/g, ' ').trim() === u.text.replace(/\s+/g, ' ').trim()) {
+      u.blocks.forEach((b) => { b.translated = null; b.engine = 'same'; setState(b, 'same'); });
+      reportSoon();
+      return;
+    }
     const parts = LAY.splitTranslation(String(text), u.blocks.map((b) => Math.max(1, b.srcText.length)));
     u.blocks.forEach((b, k) => {
       b.translated = parts[k] || '';
@@ -778,7 +785,7 @@
 
   function report(final) {
     const total = PL.blocks.filter((b) => b.state !== 'skip').length || 1;
-    const done = PL.blocks.filter((b) => b.state === 'done').length;
+    const done = PL.blocks.filter((b) => b.state === 'done' || b.state === 'same').length;
     const err = PL.blocks.filter((b) => b.state === 'error').length;
     const busy = Q.inflight > 0 || Q.queue.length > 0;
     const eng = PL.lastEngine ? (globalThis.PL_ENGINE_LABEL[PL.lastEngine] || PL.lastEngine).split('（')[0] : '';
@@ -905,7 +912,7 @@
     bCmp.addEventListener('click', async () => {
       bCmp.disabled = true;
       list.textContent = '';
-      const engines = ['chrome', 'edge', 'google'].concat(PL.settings.geminiApiKey ? ['gemini'] : []);
+      const engines = engineList().filter((e) => e !== 'gemini' || PL.settings.geminiApiKey);
       await ensureLang();
       await Promise.all(engines.map(async (eng) => {
         const txt = PL.el('div', { class: 'pl-txt', text: '翻譯中…' });
@@ -998,10 +1005,13 @@
 
   /* ══════════ 工具列與互動 ══════════ */
 
+  /** 桌面版沒有 Chrome 內建 AI（那是 Chrome 瀏覽器才有的功能） */
+  const engineList = () => (globalThis.PLDesktop ? ['google', 'edge', 'gemini'] : ['chrome', 'edge', 'google', 'gemini']);
+
   function wireBar() {
     const engine = $('pl-engine');
     engine.appendChild(PL.el('option', { value: 'auto', text: '自動（依序備援）' }));
-    ['chrome', 'edge', 'google', 'gemini'].forEach((k) => {
+    engineList().forEach((k) => {
       engine.appendChild(PL.el('option', { value: k, text: globalThis.PL_ENGINE_LABEL[k] }));
     });
     engine.value = PL.settings.forceEngine || 'auto';
@@ -1494,9 +1504,14 @@
       return;
     }
     const buf = await file.arrayBuffer();
-    await openPdf(new Uint8Array(buf), 'file:' + file.name, file.name);
+    // 桌面版拿得到完整路徑：註解就綁在路徑上，不同資料夾的同名檔案不會混在一起
+    const url = (globalThis.PLDesktop && PLDesktop.pathForFile && PLDesktop.pathForFile(file))
+      ? 'file:' + PLDesktop.pathForFile(file) : 'file:' + file.name;
+    await openPdf(new Uint8Array(buf), url, file.name);
   }
   PL.openPdfFile = openFile;
+  /** 桌面版：主程序讀好檔案後直接把內容丟進來 */
+  PL.openPdfBytes = (bytes, url, name) => openPdf(bytes, url, name);
 
   /* ══════════ 啟動 ══════════ */
 
@@ -1521,6 +1536,8 @@
     if (!url) {
       showDrop('把 PDF 檔拖進來，或按下面的按鈕選擇。');
       PL.setStatus('等待檔案');
+      // 桌面版：雙擊 PDF、從命令列帶進來的檔案，等檢視器準備好才交過來
+      if (globalThis.PLDesktop && PLDesktop.viewerReady) PLDesktop.viewerReady();
       return;
     }
 

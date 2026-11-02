@@ -14,7 +14,7 @@
       lastError: undefined,
       id: 'testbed',
       getURL: (p) => '/' + String(p).replace(/^\//, ''),
-      getManifest: () => ({ version: '0.1.0-test' }),
+      getManifest: () => ({ version: '0.2.0-test' }),
       onMessage: { addListener: (fn) => listeners.push(fn) },
 
       sendMessage(msg, cb) {

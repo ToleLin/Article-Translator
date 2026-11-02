@@ -5,9 +5,40 @@ Chrome 擴充功能。左邊原文、右邊繁體中文，**圖片、表格、�
 
 **網頁文獻和 PDF 檔都支援**。PDF 用內建的 pdf.js 渲染，左右兩欄畫的是**同一張頁面**，右欄只把文字就地換成中文 —— 圖、公式、排版天生 1:1。
 
+有兩種用法，功能相同、程式碼共用：
+
+| | Chrome 擴充功能 | Windows 桌面版（.exe） |
+|---|---|---|
+| 適合 | 在瀏覽器裡讀期刊網頁、PDF 連結 | 直接開電腦裡的 PDF，像一般 PDF 閱讀器 |
+| 安裝 | 下面「安裝」三步驟 | 下載安裝檔，見[桌面版](#windows-桌面版exe) |
+| 翻譯引擎 | Chrome 內建 AI、Edge／Bing、Google、Gemini | Google、Edge／Bing、Gemini（沒有 Chrome 內建 AI） |
+
 完整操作說明看 [使用說明書.md](使用說明書.md)。
 
 不需要註冊、不需要付費、沒有額度限制。
+
+---
+
+## 0.2.0 改了什麼
+
+**PDF 版面**
+- 修正雙欄論文被當成單欄、左右兩欄的句子被拼成同一句送翻的問題（欄距窄的期刊，例如 *Light: Science & Applications* 最明顯）——這是之前譯文「完全看不懂」的主因
+- 圖片、外框線、表格線不會再被白色方塊蓋掉：只蓋每一行原文的字，顏色從頁面取樣（藍底白字、圖上的標籤都對得上）
+- 中文字級跟原文看起來一樣大、全頁一致；段落頭尾對齊原文
+- 跨欄、跨頁沒寫完的同一句話會串起來一起翻，不再翻成兩個半句
+- 上下標（引用編號、Si₃N₄、TE₀）保留；斷字還原；頁首頁尾、公式不翻
+
+**翻譯**
+- 更快：同時送 3 個請求、每段翻好就先顯示，看得到的頁面先翻，之後在背景把整篇補完
+- 更完整：沒翻到、只翻一半的段落會自動換引擎重翻；Chrome 內建翻譯改成切句送，減少漏句
+- 譯文工具：游標停在譯文上點 ⋯，可以看原文、重翻、**並排比較各引擎**再選一個用
+- Gemini 預設模型改為 `gemini-3.6-flash`（`gemini-2.0-flash` 已於 2026-06-01 停用，舊設定會自動換掉）
+
+**標註工具（重新設計）**
+- 橫向工具列、每個工具都有文字：畫筆、螢光筆、箭頭、方框、圈選、**文字**、**便利貼**、橡皮擦
+- **復原／重做**（Ctrl+Z／Ctrl+Shift+Z），擦掉、清除都能復原
+- 便利貼真的可以貼了（舊版點了沒反應），可拖曳、縮放、換色、收合成小圖示，也會列在「註解」側欄
+- 橡皮擦可以擦線條、圖形、文字、便利貼，連選字螢光筆也擦得掉
 
 ---
 
@@ -31,6 +62,46 @@ Chrome 每次啟動會跳一個「停用開發人員模式擴充功能」的提�
 ### 換一台電腦
 
 跑 `powershell -ExecutionPolicy Bypass -File tools\build.ps1` 會在 `dist\` 產生一個 ZIP，拿到另一台電腦解壓縮後一樣用「載入未封裝項目」即可。註解與設定是各機器獨立的，可以用設定頁的「匯出全部註解」搬過去。
+
+---
+
+## Windows 桌面版（.exe）
+
+跟擴充功能是同一套 PDF 對照檢視器，包成獨立程式：雙擊 PDF 就用 PaperLens 開、不用開瀏覽器。
+
+### 下載
+
+每次程式有更新，GitHub 會自動在 Windows 上建置：
+
+1. 到專案的 **Actions** 頁面 →「桌面版（Windows）」→ 點最新一次成功（綠色勾勾）的執行
+2. 頁面最下面 **Artifacts** 的 `PaperLens-Windows` 下載、解壓縮，裡面有兩個檔案：
+   - `PaperLens-Setup-0.2.0.exe`：安裝版（可選安裝位置、建立桌面捷徑、可設為 PDF 的開啟方式）
+   - `PaperLens-Portable-0.2.0.exe`：免安裝版，放隨身碟也能用
+
+推了 `v0.2.0` 這類版本標籤時，安裝檔也會出現在 **Releases** 頁面。
+
+> 安裝檔沒有數位簽章，第一次執行 Windows 可能跳出「Windows 已保護您的電腦」。按 **其他資訊** → **仍要執行** 即可。
+
+### 用法
+
+- 開檔：選單「檔案 → 開啟 PDF…」（Ctrl+O）、把 PDF 拖進視窗、或在檔案總管對 PDF 按右鍵 →「開啟檔案 → PaperLens」
+- 其餘操作（翻譯、標註、便利貼、註解、匯出）跟擴充功能完全一樣
+- 匯出頁多了「**直接存成 PDF 檔**」，不用經過列印視窗
+- 註解、標註、翻譯快取、設定都存在 `%APPDATA%\PaperLens\paperlens-data.json`（「說明 → 關於」會顯示完整路徑）
+- 桌面版沒有 Chrome 內建 AI（那是 Chrome 瀏覽器才有的），翻譯走 Google、Edge／Bing，填了金鑰就多一個 Gemini
+
+### 自己建置
+
+需要 Node.js 20 以上：
+
+```
+cd desktop
+npm install
+npm start          # 直接執行
+npm run dist       # 在 desktop\dist\ 產生 Setup 與 Portable 兩個 .exe（請在 Windows 上執行）
+```
+
+`npm start`／`npm run dist` 會先跑 `scripts/prepare.js`，把擴充功能的網頁檔案（`pdf/`、`shared/`、`content/`…）複製到 `desktop/app/`，所以改擴充功能的程式就等於改桌面版。
 
 ---
 
@@ -88,9 +159,22 @@ Chrome 每次啟動會跳一個「停用開發人員模式擴充功能」的提�
 
 ---
 
+## 哪個翻譯引擎比較準？
+
+同一段話在不同引擎的品質差很多，尤其是專有名詞。在 PDF 檢視器裡游標停在任一段譯文上、點右上角的 **⋯** →「**比較各引擎**」，就能把這一段同時丟給每個引擎、並排比較，選一個「採用」（會記進快取，下次直接用）。
+
+大致的經驗（以這次測試的光學論文為例）：
+- **Chrome 內建 AI**：免費、離線、沒有額度，一般句子大致正確，但專有名詞常直譯（metasurface→「元表面」、meta-diatom→「元矽藻」、nonlocal→「非本地」），長句偶爾重複或漏半句。0.2.0 已改成切句送，漏句會少很多
+- **Google／微軟**：學術句子通順、名詞較準，是一般建議的主力；免費端點同一個網路大量使用時會暫時限流，限流時會自動換下一個
+- **Gemini（自備免費金鑰）**：專有名詞與學術語氣最好，適合重要的論文
+
+引擎順序在設定頁用 ▲▼ 調整，或在工具列的引擎選單直接指定。
+
+---
+
 ## 資料存在哪
 
-全部在本機 `chrome.storage.local`：翻譯快取、螢光筆與心得、設定、Gemini 金鑰。沒有任何伺服器、沒有帳號。
+全部在本機 `chrome.storage.local`（桌面版是使用者資料夾的一個 JSON 檔）：翻譯快取、螢光筆與心得、手寫標註、便利貼、設定、Gemini 金鑰。沒有任何伺服器、沒有帳號。
 
 設定頁可以**匯出全部註解成 JSON**（建議偶爾備份）以及匯入。同一篇文獻的註解用去掉追蹤參數後的網址當索引，所以從不同來源連過去也認得出來。
 
@@ -122,12 +206,21 @@ content/translate.js   排隊、批次送翻、引擎備援、回填
 content/annotate.js    螢光筆、心得、AI 解釋、側欄
 content/export.js      收集左右對照內容
 content/boot.js        入口與訊息處理
+content/overlay.js     手寫標註、文字方塊、便利貼、復原／重做（網頁與 PDF 共用）
+pdf/layout.js          PDF 版面分析：欄、行、段落、上下標、頁首頁尾、跨欄接續（純計算，可在 Node 測）
+pdf/pdfview.js         PDF 對照檢視器：渲染、就地覆蓋譯文、翻譯排程、段落工具、匯出
+shared/remote-engines.js  Google／微軟／Gemini 引擎與分派（擴充功能 background 與桌面版共用）
 export/                PDF 匯出頁
 options/ popup/        設定頁與彈出視窗
-tools/make-icons.js    產生圖示（node tools/make-icons.js）
+desktop/               Windows 桌面版（Electron）：main.js 主程序、shim.js 模擬 chrome.* API
+.github/workflows/desktop.yml  在 Windows 上自動建置 .exe
+tools/make-icons.js    產生圖示（node tools/make-icons.js，含桌面版 512px 圖示）
 tools/devserver.js     開發用靜態伺服器
 tools/testbed.html     離線測試台：用假的 chrome API 把 content script 跑在一篇假論文上
 ```
+
+PDF 檢視器也可以在測試台跑（不用裝擴充功能）：
+<http://localhost:5177/pdf/pdfview.html?testbed=1&file=/tools/test-paper.pdf>
 
 ### 測試台
 
