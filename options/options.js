@@ -274,6 +274,21 @@
 
     $('testEngines').addEventListener('click', testEngines);
 
+    $('testGemini').addEventListener('click', async () => {
+      const out = $('geminiResult');
+      const key = $('geminiApiKey').value.trim();
+      if (!key) { out.textContent = '請先貼上金鑰'; return; }
+      $('testGemini').disabled = true;
+      out.textContent = '測試中…';
+      try {
+        const r = await send({ type: 'gemini.test', key, model: $('geminiModel').value.trim() || settings.geminiModel, targetLang: settings.targetLang });
+        out.textContent = '✓ 可以用（' + (r.ms / 1000).toFixed(1) + ' 秒）：' + String(r.sample).slice(0, 50);
+      } catch (e) {
+        out.textContent = '✗ ' + (e.message || e);
+      }
+      $('testGemini').disabled = false;
+    });
+
     $('clearCache').addEventListener('click', async () => {
       const all = await chrome.storage.local.get(null);
       const kill = Object.keys(all).filter((k) => k.startsWith('tc:'));

@@ -14,6 +14,7 @@ const CONTENT_JS = [
   'content/translate.js',
   'content/annotate.js',
   'content/overlay.js',
+  'content/geminikey.js',
   'content/export.js',
   'content/boot.js'
 ];
@@ -171,6 +172,13 @@ const handlers = {
 
   async 'translate.remote'(msg) {
     return remoteTranslate(msg);
+  },
+
+  // 「✦ Gemini」視窗的「測試金鑰」：金鑰還沒儲存，所以直接帶在訊息裡
+  async 'gemini.test'(msg) {
+    const s = await PL_loadSettings();
+    if (!msg.key) throw new Error('請先貼上金鑰');
+    return PLRemote.geminiTest(msg.key, msg.model, PL_mapLang('gemini', msg.targetLang || s.targetLang));
   },
 
   async 'settings.get'() {

@@ -484,6 +484,62 @@ html.pl-drawing .pl-pane { user-select: none; }
 }
 #pl-clearmenu button:hover { background: #fee2e2; color: #b91c1c; }
 
+/* ══════════ Gemini 金鑰入口 ══════════ */
+
+#pl-bar [data-pl-gemini-btn] { font-weight: 600; }
+#pl-bar [data-pl-gemini-btn]:not(.pl-on) { color: #7c3aed; border-color: rgba(124, 58, 237, .35); }
+#pl-bar [data-pl-gemini-btn].pl-on { background: linear-gradient(135deg, #4f46e5, #7c3aed); border-color: #6d28d9; color: #fff; }
+
+#pl-gem {
+  position: fixed; inset: 0; z-index: 2147483641;
+  display: none; align-items: center; justify-content: center;
+  background: rgba(15, 17, 23, .45);
+}
+#pl-gem.pl-show { display: flex; }
+#pl-gem .pl-gem-card {
+  width: min(540px, calc(100vw - 32px)); max-height: calc(100vh - 40px); overflow: auto;
+  display: flex; flex-direction: column; gap: 10px;
+  padding: 16px 18px 18px;
+  background: var(--pl-bg); color: var(--pl-fg);
+  border: 1px solid var(--pl-line); border-radius: 14px;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, .35);
+  font: 13.5px/1.6 system-ui, "Microsoft JhengHei", "PingFang TC", sans-serif;
+}
+#pl-gem header { display: flex; align-items: center; gap: 8px; font-size: 15px; }
+#pl-gem header b { color: #6d28d9; }
+#pl-gem .pl-spacer { flex: 1; }
+#pl-gem p { margin: 0; }
+#pl-gem .pl-gem-how { font-size: 12.5px; color: var(--pl-muted); }
+#pl-gem a { color: var(--pl-accent); }
+#pl-gem .pl-gem-row { display: flex; align-items: center; gap: 8px; }
+#pl-gem .pl-gem-row > span { flex: 0 0 64px; color: var(--pl-muted); font-size: 12.5px; }
+#pl-gem .pl-gem-row input, #pl-gem .pl-gem-row select {
+  flex: 1; min-width: 0; font: inherit; padding: 6px 9px;
+  color: var(--pl-fg); background: var(--pl-bg);
+  border: 1px solid var(--pl-line); border-radius: 8px;
+}
+#pl-gem .pl-gem-row input:focus, #pl-gem .pl-gem-row select:focus { outline: 2px solid rgba(79, 70, 229, .45); outline-offset: 0; }
+#pl-gem #pl-gem-key { font-family: ui-monospace, Consolas, monospace; letter-spacing: .3px; }
+#pl-gem .pl-gem-chk { display: flex; align-items: center; gap: 7px; font-size: 13px; cursor: pointer; }
+#pl-gem .pl-gem-testrow { display: flex; align-items: center; gap: 10px; min-height: 30px; }
+#pl-gem #pl-gem-msg { font-size: 12.5px; color: var(--pl-muted); word-break: break-word; }
+#pl-gem #pl-gem-msg.pl-gem-ok { color: #15803d; }
+#pl-gem #pl-gem-msg.pl-gem-bad { color: #b91c1c; }
+#pl-gem footer, #pl-gem .pl-gem-row2 { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#pl-gem .pl-gem-after { padding: 10px 12px; border-radius: 10px; background: color-mix(in srgb, #7c3aed 8%, var(--pl-bg)); display: flex; flex-direction: column; gap: 8px; }
+#pl-gem button {
+  font: inherit; padding: 6px 12px; cursor: pointer;
+  color: var(--pl-fg); background: var(--pl-bg);
+  border: 1px solid var(--pl-line); border-radius: 8px;
+}
+#pl-gem button:hover { border-color: var(--pl-accent); color: var(--pl-accent); }
+#pl-gem button.pl-primary, #pl-gem button.pl-primary:hover { background: var(--pl-accent); border-color: var(--pl-accent); color: #fff; }
+#pl-gem button.pl-primary:hover { filter: brightness(1.1); }
+#pl-gem button.pl-danger:hover { border-color: #dc2626; color: #dc2626; }
+#pl-gem button.pl-x { border: 0; padding: 2px 6px; color: var(--pl-muted); }
+#pl-gem button[disabled] { opacity: .5; cursor: default; }
+#pl-gem [hidden] { display: none !important; }
+
 /* ══════════ 可調整寬度的註解側欄 ══════════ */
 
 #pl-side { width: var(--pl-side-w, 320px); }

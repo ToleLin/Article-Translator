@@ -24,7 +24,11 @@
             case 'ai.probe': return { where: 'testbed', translator: 'unsupported', languageModel: 'unsupported' };
             case 'ai.warm': throw new Error('testbed 沒有內建 AI');
             case 'ai.translate': throw new Error('testbed 沒有內建 AI');
-            case 'translate.remote': return { engine: 'testbed', result: msg.texts.map(fakeZh) };
+            case 'translate.remote': return { engine: msg.engine || 'testbed', result: msg.texts.map(fakeZh) };
+            // 「✦ Gemini」的測試金鑰：AIza 開頭的假金鑰就當作可用，其他的回報金鑰無效
+            case 'gemini.test':
+              if (/^AIza/.test(msg.key || '')) return { ms: 420, sample: '超表面把不同顏色的光導向晶片上的不同位置。', model: msg.model };
+              throw new Error('Gemini 金鑰無效或已過期：請確認有完整複製（通常是 AIza 開頭、約 39 個字）');
             case 'ai.explain': return { text: '重點：測試用的假解釋。\n細節：這是 testbed。\n名詞：無', via: 'testbed' };
             case 'image.inline': return {};
             case 'settings.get': return Object.assign({}, globalThis.PL_DEFAULTS);

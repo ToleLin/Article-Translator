@@ -622,11 +622,36 @@
      - 每一段一翻好就畫上去，不用等整批
      - 看得到的頁面先翻；翻完了就在背景把整篇翻完（可在設定頁關掉） */
 
-  const Q = { queue: [], queued: new Set(), inflight: 0, failures: 0, paused: false, started: false, firstDone: false };
+  const Q = {
+    queue: [], queued: new Set(), inflight: 0, failures: 0, paused: false, started: false, firstDone: false,
+    gen: 0,            // 每次重置就加一：還在路上的舊請求回來時直接丟掉，不會蓋掉新的譯文
+    noCache: false     // 「用 Gemini 重新翻譯整份」時不讀快取
+  };
 
   function resetQueue() {
     Q.queue = []; Q.queued = new Set(); Q.failures = 0; Q.paused = false; Q.started = false; Q.firstDone = false;
+    Q.gen++; Q.noCache = false;
   }
+
+  /** 全部重翻（換了引擎之後用）；opts.noCache：不要拿快取裡舊引擎的譯文 */
+  PL.retranslateAll = function (opts) {
+    resetQueue();
+    Q.noCache = !!(opts && opts.noCache);
+    for (const b of PL.blocks) {
+      if (b.state === 'skip') continue;
+      b.translated = null;
+      b.engine = null;
+      setState(b, 'pending');
+      if (b.right) {
+        b.right.removeAttribute('data-pl-done');
+        b.right.classList.remove('pl-overflow');
+        b.right.style.background = '';
+        if (b.rightText) b.rightText.textContent = '';
+      }
+    }
+    report();
+    translateAll();
+  };
 
   function setState(b, s) {
     b.state = s;
@@ -733,12 +758,16 @@
   }
 
   async function runJob(units) {
+    const gen = Q.gen;
     await ensureLang();
+    if (gen !== Q.gen) return;
     units.forEach((u) => u.blocks.forEach((b) => setState(b, 'working')));
     try {
       const out = await T.translateCached(units.map((u) => u.text), {
-        onItem: (k, t, eng) => deliver(units[k], t, eng)
+        noCache: Q.noCache,
+        onItem: (k, t, eng) => { if (gen === Q.gen) deliver(units[k], t, eng); }
       });
+      if (gen !== Q.gen) return;          // 期間按了重翻、換了欄數：這批結果作廢
       PL.lastEngine = T.lastEngine;
       units.forEach((u, k) => {
         if (u.delivered) return;
@@ -748,6 +777,7 @@
       Q.failures = 0;
       units.forEach((u) => Q.queued.delete(u.head));
     } catch (e) {
+      if (gen !== Q.gen) return;
       Q.failures++;
       const left = units.filter((u) => !u.delivered);
       left.forEach((u) => u.blocks.forEach((b) => setState(b, 'pending')));
@@ -781,6 +811,7 @@
       const list = PL.blocks.filter((b) => b.page === p && b.state === 'pending').map((b) => b.i);
       if (list.length) { enqueue(list); return; }
     }
+    Q.noCache = false;           // 整份都重翻完了，之後恢復用快取
   }
 
   function report(final) {
@@ -1016,10 +1047,20 @@
     });
     engine.value = PL.settings.forceEngine || 'auto';
     engine.addEventListener('change', () => {
+      if (engine.value === 'gemini' && !PL.settings.geminiApiKey) {
+        // 還沒有金鑰就選 Gemini：直接打開金鑰視窗
+        engine.value = PL.settings.forceEngine || 'auto';
+        PL.openGeminiDialog();
+        return;
+      }
       PL.settings.forceEngine = engine.value === 'auto' ? null : engine.value;
       Q.failures = 0; Q.paused = false;
+      PL.refreshGeminiButton();
       PL.toast('引擎切換為：' + (engine.value === 'auto' ? '自動' : globalThis.PL_ENGINE_LABEL[engine.value]));
     });
+
+    $('pl-gemini').addEventListener('click', () => PL.openGeminiDialog());
+    PL.refreshGeminiButton();
 
     $('pl-translate-all').addEventListener('click', translateAll);
 
@@ -1452,6 +1493,7 @@
           else if (msg.command === 'sidebar') PL.toggleSidebar();
           else if (msg.command === 'retry') PL.retryFailed();
           else if (msg.command === 'export-pdf') doExport();
+          else if (msg.command === 'gemini-key') PL.openGeminiDialog();
           return { ok: true };
         case 'pl.settings':
           PL.settings = Object.assign({}, PL.settings, msg.patch || {});

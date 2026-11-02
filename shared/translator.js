@@ -392,7 +392,8 @@
   T.translateCached = async function (texts, opts) {
     opts = opts || {};
     const lang = cfg.getSettings().targetLang;
-    const out = await T.cacheGetMany(texts, lang);
+    // opts.noCache：換了引擎要整份重翻時，不拿快取裡舊引擎的譯文（翻好的新譯文照樣寫回快取）
+    const out = opts.noCache ? new Array(texts.length).fill(undefined) : await T.cacheGetMany(texts, lang);
     const engines = new Array(texts.length).fill(null);
     const done = new Set();
 

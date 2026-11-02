@@ -14,6 +14,7 @@
   let running = false;
   let io = null;
   let consecutiveFailures = 0;
+  let noCache = false;            // 整份重翻（換成 Gemini）期間不讀快取
 
   T.init({
     getSettings: () => PL.settings || globalThis.PL_DEFAULTS,
@@ -180,7 +181,7 @@
   }
 
   async function translateBatch(batch) {
-    const out = await T.translateCached(batch.map((b) => b.srcText));
+    const out = await T.translateCached(batch.map((b) => b.srcText), { noCache });
     PL.lastEngine = T.lastEngine;
 
     const retry = [];
@@ -254,7 +255,7 @@
     if (engineName) msg += ' · ' + engineName;
     if (err) msg += ' · ' + err + ' 段失敗';
     if (final && !queue.length) {
-      if (done >= total) msg = '完成 ' + msg;
+      if (done >= total) { msg = '完成 ' + msg; noCache = false; }
       else if (PL.settings.lazyTranslate) msg = '已翻 ' + msg + '（捲到哪翻到哪）';
       else msg = '暫停 ' + msg;
     }
@@ -268,9 +269,10 @@
     enqueue(bad);
   };
 
-  /** 換引擎或換語言後重翻全文 */
-  PL.retranslateAll = function () {
+  /** 換引擎或換語言後重翻全文；opts.noCache：不要拿快取裡舊引擎的譯文（例如改用 Gemini） */
+  PL.retranslateAll = function (opts) {
     queue = []; queued = new Set();
+    noCache = !!(opts && opts.noCache);
     for (const b of PL.blocks) {
       if (b.state === 'skip') continue;
       b.right.innerHTML = b.origHTML;

@@ -185,6 +185,29 @@
 
   /* ══════════ Gemini（選用，使用者自備 AI Studio 免費金鑰） ══════════ */
 
+  /** Gemini 的錯誤翻成看得懂的中文（金鑰貼錯、沒權限、模型名稱錯、額度用完） */
+  function geminiError(status, body) {
+    let detail = '';
+    try { detail = (JSON.parse(body).error || {}).message || ''; } catch (e) { detail = String(body || '').slice(0, 160); }
+    if (/API key not valid|API_KEY_INVALID|API key expired/i.test(body || '')) {
+      return 'Gemini 金鑰無效或已過期：請確認有完整複製（通常是 AIza 開頭、約 39 個字）';
+    }
+    if (status === 403) return 'Gemini 拒絕存取（403）：這把金鑰沒有權限，或這個專案沒有啟用 Gemini API';
+    if (status === 404) return 'Gemini 找不到這個模型（404）：請在「✦ Gemini」裡換一個模型';
+    if (status === 429) return 'Gemini 免費額度用完或請求太頻繁（429）：稍等一下再試，或換一個模型';
+    if (status >= 500) return 'Gemini 伺服器暫時有問題（' + status + '）：稍後再試';
+    return 'Gemini 回應 ' + status + (detail ? '：' + detail.slice(0, 160) : '');
+  }
+
+  /** 「✦ Gemini」視窗的「測試金鑰」：用這把金鑰實際翻一句 */
+  async function geminiTest(apiKey, model, tgt) {
+    const t0 = Date.now();
+    const out = await geminiTranslate(['The metasurface routes light of different colors to different positions on the chip.'],
+      'en', tgt, apiKey, model);
+    if (!out || !out[0]) throw new Error('Gemini 沒有回傳譯文');
+    return { ms: Date.now() - t0, sample: out[0], model: model || g.PL_DEFAULTS.geminiModel };
+  }
+
   async function geminiTranslate(texts, src, tgt, apiKey, model) {
     if (!apiKey) throw new Error('尚未在設定頁填入 Gemini API 金鑰');
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
@@ -216,8 +239,8 @@
         })
       });
       if (!res.ok) {
-        const msg = await res.text().catch(() => '');
-        throw new Error('Gemini 回應 ' + res.status + ' ' + msg.slice(0, 180));
+        const body = await res.text().catch(() => '');
+        throw new Error(geminiError(res.status, body));
       }
       const data = await res.json();
       const raw = data && data.candidates && data.candidates[0]
@@ -358,7 +381,7 @@
         generationConfig: { temperature: 0.3 }
       })
     });
-    if (!res.ok) throw new Error('Gemini 回應 ' + res.status);
+    if (!res.ok) throw new Error(geminiError(res.status, await res.text().catch(() => '')));
     const data = await res.json();
     const out = data && data.candidates && data.candidates[0]
       && data.candidates[0].content && data.candidates[0].content.parts
@@ -367,5 +390,5 @@
     return out;
   }
 
-  g.PLRemote = { googleTranslate, edgeTranslate, geminiTranslate, translate, explain };
+  g.PLRemote = { googleTranslate, edgeTranslate, geminiTranslate, geminiTest, translate, explain };
 })(globalThis);

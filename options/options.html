@@ -50,6 +50,8 @@
     <div class="field">
       <label for="geminiApiKey">Gemini API 金鑰（選用）</label>
       <input type="password" id="geminiApiKey" placeholder="貼上 Google AI Studio 的免費金鑰，留空代表不用">
+      <div class="actions"><button id="testGemini" type="button">測試金鑰</button><span id="geminiResult" class="result"></span></div>
+      <p class="hint">也可以直接在閱讀畫面工具列的「✦ Gemini」按鈕貼上金鑰，一鍵改用 Gemini 翻譯。</p>
       <p class="hint">
         到 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">aistudio.google.com/apikey</a>
         可以免費申請（有免費額度）。填了之後翻譯品質與 AI 解釋會明顯更好；金鑰只存在這台電腦，不會傳給我們。

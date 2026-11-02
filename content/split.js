@@ -265,10 +265,20 @@
     });
     engine.value = PL.settings.forceEngine || 'auto';
     engine.addEventListener('change', () => {
+      if (engine.value === 'gemini' && !PL.settings.geminiApiKey && PL.openGeminiDialog) {
+        // 還沒有金鑰就選 Gemini：直接打開金鑰視窗
+        engine.value = PL.settings.forceEngine || 'auto';
+        PL.openGeminiDialog();
+        return;
+      }
       PL.settings.forceEngine = engine.value === 'auto' ? null : engine.value;
+      if (PL.refreshGeminiButton) PL.refreshGeminiButton();
       PL.toast('引擎切換為：' + (engine.value === 'auto' ? '自動' : globalThis.PL_ENGINE_LABEL[engine.value]));
     });
     bar.appendChild(engine);
+
+    // 獨立的 Gemini 入口：貼上金鑰就能改用 Gemini 翻譯
+    if (PL.makeGeminiButton) bar.appendChild(PL.makeGeminiButton());
 
     const btnAll = PL.el('button', { id: 'pl-translate-all', text: '翻譯全文' });
     btnAll.addEventListener('click', () => PL.translateAll());

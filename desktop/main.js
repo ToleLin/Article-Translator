@@ -98,6 +98,10 @@ const NO_AI = '桌面版沒有 Chrome 內建 AI（那是 Chrome 瀏覽器才有�
 
 const handlers = {
   'translate.remote': (msg) => PLRemote.translate(msg, settings()),
+  'gemini.test': (msg) => {
+    if (!msg.key) throw new Error('請先貼上金鑰');
+    return PLRemote.geminiTest(msg.key, msg.model, globalThis.PL_mapLang('gemini', msg.targetLang || settings().targetLang));
+  },
   'ai.detect': () => ({ lang: null }),
   'ai.probe': () => ({ where: 'desktop', translator: 'unsupported', languageModel: 'unsupported', tried: [] }),
   'ai.warm': () => { throw new Error(NO_AI); },
@@ -284,6 +288,7 @@ function buildMenu() {
         { role: 'recentDocuments', label: '最近開啟' },
         { type: 'separator' },
         { label: '翻譯全文', accelerator: 'CmdOrCtrl+T', click: (m, w) => send(w, { type: 'pl.command', command: 'translate-all' }) },
+        { label: '使用 Gemini 翻譯（輸入金鑰）…', accelerator: 'CmdOrCtrl+G', click: (m, w) => send(w, { type: 'pl.command', command: 'gemini-key' }) },
         { label: '匯出左右對照 PDF…', accelerator: 'CmdOrCtrl+E', click: (m, w) => send(w, { type: 'pl.command', command: 'export-pdf' }) },
         { type: 'separator' },
         { label: '設定…', accelerator: 'CmdOrCtrl+,', click: () => openAux('options/options.html', { width: 900, height: 900 }) },
