@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>PaperLens 匯出</title>
+  <link rel="stylesheet" href="export.css">
+  <style id="page-rule">@page { size: A4 landscape; margin: 12mm; }</style>
+</head>
+<body>
+
+<div id="bar" class="noprint">
+  <span class="brand">PaperLens</span>
+
+  <label>版面
+    <select id="layout">
+      <option value="pair">左原文 · 右譯文</option>
+      <option value="dst">只要譯文</option>
+      <option value="src">只要原文</option>
+    </select>
+  </label>
+
+  <label>紙張
+    <select id="orient">
+      <option value="landscape">A4 橫向（推薦）</option>
+      <option value="portrait">A4 直向</option>
+      <option value="a3landscape">A3 橫向</option>
+    </select>
+  </label>
+
+  <label>字級
+    <select id="fontsize">
+      <option value="8.5">很小 8.5pt</option>
+      <option value="9.5">小 9.5pt</option>
+      <option value="10.5">中 10.5pt</option>
+      <option value="11.5">大 11.5pt</option>
+    </select>
+  </label>
+
+  <label>圖表
+    <select id="media">
+      <option value="wide">跨欄放大（省紙）</option>
+      <option value="pair">跟文字一樣並排</option>
+    </select>
+  </label>
+
+  <label class="chk"><input type="checkbox" id="bodyonly"> 只留正文</label>
+  <label class="chk"><input type="checkbox" id="notes"> 附上我的註解</label>
+  <label class="chk"><input type="checkbox" id="inline"> 內嵌圖片</label>
+  <label class="chk"><input type="checkbox" id="hlprint"> 印出螢光標記</label>
+
+  <span class="spacer"></span>
+  <span id="status" class="status"></span>
+  <button id="print" class="primary">列印 / 另存 PDF</button>
+</div>
+
+<div id="hint" class="noprint hint">
+  在列印視窗的「目的地」選擇 <b>另存為 PDF</b>；若想保留背景色（螢光筆），請展開「更多設定」勾選 <b>背景圖形</b>。
+</div>
+
+<main id="doc">
+  <header id="head">
+    <h1 id="title"></h1>
+    <div id="meta"></div>
+  </header>
+  <div id="rows"></div>
+  <section id="notesec" hidden>
+    <h2>閱讀註解</h2>
+    <ol id="noteslist"></ol>
+  </section>
+</main>
+
+<script src="../shared/defaults.js"></script>
+<script src="export.js"></script>
+</body>
+</html>

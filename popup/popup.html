@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>PaperLens</title>
+  <style>
+    :root { color-scheme: light dark; --accent:#4f46e5; --line:#e3e5ec; --muted:#6b7280; }
+    @media (prefers-color-scheme: dark) { :root { --line:#2c3038; --muted:#9aa2b1; } }
+    body { width: 268px; margin: 0; padding: 14px;
+           font: 13px/1.55 system-ui, "Microsoft JhengHei", sans-serif; }
+    h1 { margin: 0 0 2px; font-size: 15px; color: var(--accent); letter-spacing: .3px; }
+    .sub { color: var(--muted); font-size: 11.5px; margin-bottom: 12px; }
+    button { width: 100%; font: inherit; margin-bottom: 7px; padding: 9px 10px; cursor: pointer;
+             border: 1px solid var(--line); border-radius: 9px; background: Canvas; color: CanvasText;
+             text-align: left; }
+    button:hover { border-color: var(--accent); color: var(--accent); }
+    button.primary { background: var(--accent); border-color: var(--accent); color: #fff; font-weight: 600; text-align: center; }
+    .kbd { float: right; color: var(--muted); font-size: 11px; }
+    button.primary .kbd { color: rgba(255,255,255,.8); }
+    .row { display: flex; gap: 7px; }
+    .row button { margin-bottom: 7px; }
+    #state { font-size: 11.5px; color: var(--muted); min-height: 16px; margin-top: 4px; }
+    hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
+  </style>
+</head>
+<body>
+  <h1>PaperLens</h1>
+  <div class="sub">文獻對照閱讀 · 註解 · 雙欄 PDF</div>
+
+  <button id="toggle" class="primary">開啟／關閉對照閱讀 <span class="kbd">Alt+Shift+T</span></button>
+  <button id="all">翻譯全文</button>
+  <div class="row">
+    <button id="notes">註解側欄</button>
+    <button id="retry">重試失敗段落</button>
+  </div>
+  <button id="pdf">匯出雙欄 PDF</button>
+
+  <hr>
+  <button id="options">設定…</button>
+  <div id="state"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

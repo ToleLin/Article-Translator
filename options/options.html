@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>PaperLens 設定</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <h1>PaperLens 設定</h1>
+    <p class="sub">文獻對照閱讀器 · <span id="ver"></span></p>
+  </header>
+
+  <section>
+    <h2>翻譯</h2>
+
+    <div class="field">
+      <label for="targetLang">譯文語言</label>
+      <select id="targetLang">
+        <option value="zh-Hant">繁體中文</option>
+        <option value="zh-Hans">简体中文</option>
+        <option value="en">English</option>
+        <option value="ja">日本語</option>
+      </select>
+    </div>
+
+    <div class="field">
+      <label for="sourceLang">原文語言</label>
+      <select id="sourceLang">
+        <option value="auto">自動偵測</option>
+        <option value="en">English</option>
+        <option value="ja">日本語</option>
+        <option value="ko">한국어</option>
+        <option value="zh-Hans">简体中文</option>
+      </select>
+      <p class="hint">Chrome 內建翻譯必須知道原文語言；自動偵測失敗時會當成英文。</p>
+    </div>
+
+    <div class="field">
+      <label>引擎優先順序</label>
+      <ol id="engineOrder" class="engines"></ol>
+      <p class="hint">由上往下嘗試，失敗會自動換下一個。用 ▲▼ 調整順序，取消勾選代表停用。</p>
+    </div>
+
+    <label class="chk"><input type="checkbox" id="autoFallback"> 某個引擎失敗時自動換下一個</label>
+    <label class="chk"><input type="checkbox" id="skipChinese"> 已經是中文的段落就不翻</label>
+
+    <div class="field">
+      <label for="geminiApiKey">Gemini API 金鑰（選用）</label>
+      <input type="password" id="geminiApiKey" placeholder="貼上 Google AI Studio 的免費金鑰，留空代表不用">
+      <p class="hint">
+        到 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">aistudio.google.com/apikey</a>
+        可以免費申請（有免費額度）。填了之後翻譯品質與 AI 解釋會明顯更好；金鑰只存在這台電腦，不會傳給我們。
+      </p>
+    </div>
+
+    <div class="field">
+      <label for="geminiModel">Gemini 模型</label>
+      <input type="text" id="geminiModel" placeholder="gemini-2.0-flash">
+    </div>
+
+    <div class="actions">
+      <button id="testEngines">測試引擎可用性</button>
+      <span id="testResult" class="result"></span>
+    </div>
+  </section>
+
+  <section>
+    <h2>閱讀行為</h2>
+    <label class="chk"><input type="checkbox" id="autoTranslate"> 開啟對照後自動開始翻譯</label>
+    <label class="chk"><input type="checkbox" id="lazyTranslate"> 只翻視窗附近的段落（長論文開得快，捲到哪翻到哪）</label>
+    <label class="chk"><input type="checkbox" id="syncScroll"> 左右捲動同步</label>
+    <label class="chk"><input type="checkbox" id="dimOriginal"> 原文欄稍微變淡，視線集中在譯文</label>
+    <label class="chk"><input type="checkbox" id="showSidebar"> 開啟時就展開註解側欄</label>
+    <label class="chk"><input type="checkbox" id="autoPdf"> 開啟 PDF 連結時自動用 PaperLens 的 PDF 對照檢視器</label>
+    <p class="hint">PDF 需要讀取本機檔案時，要另外到 <code>chrome://extensions</code> → PaperLens →「詳細資料」→ 打開「允許存取檔案網址」。</p>
+  </section>
+
+  <section>
+    <h2>譯文外觀</h2>
+
+    <div class="field">
+      <label for="transFont">譯文字體</label>
+      <select id="transFont">
+        <option value='"Noto Serif TC", "Source Han Serif TC", "PingFang TC", "Microsoft JhengHei", serif'>思源宋體 / 襯線（適合長文閱讀）</option>
+        <option value='"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif'>思源黑體 / 無襯線</option>
+        <option value='"Microsoft JhengHei", sans-serif'>微軟正黑體</option>
+        <option value='inherit'>沿用原網站字體</option>
+      </select>
+    </div>
+
+    <div class="field inline">
+      <label for="transFontScale">字級 <output id="transFontScaleOut"></output></label>
+      <input type="range" id="transFontScale" min="0.8" max="1.5" step="0.05">
+    </div>
+
+    <div class="field inline">
+      <label for="transLineHeight">行高 <output id="transLineHeightOut"></output></label>
+      <input type="range" id="transLineHeight" min="1.4" max="2.4" step="0.05">
+    </div>
+
+    <div class="field">
+      <label for="defaultHighlight">預設螢光筆顏色</label>
+      <select id="defaultHighlight">
+        <option value="yellow">黃</option>
+        <option value="green">綠</option>
+        <option value="blue">藍</option>
+        <option value="pink">粉</option>
+        <option value="purple">紫</option>
+      </select>
+    </div>
+  </section>
+
+  <section>
+    <h2>資料</h2>
+    <div class="actions">
+      <button id="clearCache">清除翻譯快取</button>
+      <button id="exportNotes">匯出全部註解 (JSON)</button>
+      <button id="importNotes">匯入註解</button>
+      <input type="file" id="importFile" accept="application/json" hidden>
+      <button id="clearNotes" class="danger">刪除全部註解</button>
+    </div>
+    <p id="dataInfo" class="hint"></p>
+  </section>
+
+  <section>
+    <h2>快捷鍵</h2>
+    <p class="hint">
+      Alt+Shift+T 開關對照閱讀　·　Alt+Shift+H 螢光標記選取文字。<br>
+      要改成別的組合，在網址列輸入 <code>chrome://extensions/shortcuts</code>。
+    </p>
+  </section>
+
+  <div id="saved" class="saved">已儲存</div>
+</div>
+
+<script src="../shared/defaults.js"></script>
+<script src="options.js"></script>
+</body>
+</html>

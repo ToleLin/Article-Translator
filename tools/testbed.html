@@ -1,0 +1,202 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Photonic Crystal Nanobeam Cavities — Test Paper</title>
+<link rel="stylesheet" href="../content/pl.css">
+<style>
+  body { max-width: 820px; margin: 0 auto; padding: 32px 26px 120px;
+         font: 16px/1.7 Georgia, "Times New Roman", serif; color: #1b1d23; }
+  h1 { font-size: 28px; line-height: 1.3; }
+  h2 { margin-top: 34px; font-size: 20px; border-bottom: 1px solid #ddd; padding-bottom: 5px; }
+  .authors { color: #555; font-style: italic; }
+  .abstract { background: #f4f5f8; padding: 16px 18px; border-radius: 8px; }
+  figure { margin: 24px 0; text-align: center; }
+  figcaption { font-size: 13.5px; color: #555; margin-top: 8px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border: 1px solid #ccc; padding: 6px 9px; }
+  code { background: #eef; padding: 1px 4px; border-radius: 3px; font-size: 14px; }
+  nav { background: #222; color: #fff; padding: 10px 16px; margin: -32px -26px 24px; font-size: 13px; }
+  nav a { color: #9cf; margin-right: 14px; }
+  #devbar { position: fixed; right: 12px; bottom: 12px; z-index: 2147483647;
+            background: #111; color: #fff; padding: 10px; border-radius: 10px; font: 12px system-ui; }
+  #devbar button { display: block; width: 100%; margin: 3px 0; font: inherit; padding: 5px 9px; cursor: pointer; }
+  #devout { max-width: 260px; white-space: pre-wrap; margin-top: 6px; color: #9f9; }
+</style>
+</head>
+<body>
+
+<nav><a href="#">Home</a><a href="#">Journals</a><a href="#">Search</a></nav>
+
+<h1>High-<em>Q</em> Photonic Crystal Nanobeam Cavities for On-Chip Sensing</h1>
+<p class="authors">A. Researcher<sup><a href="#aff1">1</a></sup>, B. Colleague<sup><a href="#aff2">2</a></sup></p>
+
+<div class="abstract">
+  <p><strong>Abstract.</strong> We report the design, fabrication and characterization of one-dimensional
+  photonic crystal nanobeam cavities in silicon-on-insulator, reaching a measured loaded quality factor of
+  <code>1.2 × 10<sup>6</sup></code> at a resonant wavelength near 1550 nm. The devices exhibit a mode volume of
+  0.68 (&lambda;/n)<sup>3</sup>, enabling strong light–matter interaction in a footprint compatible with
+  dense photonic integration <a href="#r1">[1]</a>, <a href="#r2">[2]</a>.</p>
+</div>
+
+<h2>1. Introduction</h2>
+<p>Optical microcavities confine light to small volumes for long times, and the ratio of these two quantities
+governs the strength of light–matter coupling. Over the past two decades, photonic crystal cavities have
+emerged as the platform of choice for reaching simultaneously high quality factors and wavelength-scale
+mode volumes <a href="#r3">[3]</a>.</p>
+
+<p>In this work we focus on the <em>nanobeam</em> geometry, in which a one-dimensional lattice of holes is
+etched into a suspended waveguide. Compared with two-dimensional slab cavities, nanobeams offer a smaller
+footprint, simpler fabrication, and natural compatibility with bus-waveguide coupling.</p>
+
+<figure>
+  <img src="data:image/svg+xml;utf8,&lt;svg xmlns='http://www.w3.org/2000/svg' width='520' height='180'&gt;&lt;rect width='520' height='180' fill='%23dde5f5'/&gt;&lt;rect x='30' y='70' width='460' height='40' fill='%23334' /&gt;&lt;g fill='%23dde5f5'&gt;&lt;circle cx='70' cy='90' r='13'/&gt;&lt;circle cx='115' cy='90' r='12'/&gt;&lt;circle cx='158' cy='90' r='11'/&gt;&lt;circle cx='198' cy='90' r='9'/&gt;&lt;circle cx='236' cy='90' r='7'/&gt;&lt;circle cx='284' cy='90' r='7'/&gt;&lt;circle cx='322' cy='90' r='9'/&gt;&lt;circle cx='362' cy='90' r='11'/&gt;&lt;circle cx='405' cy='90' r='12'/&gt;&lt;circle cx='450' cy='90' r='13'/&gt;&lt;/g&gt;&lt;text x='260' y='150' font-size='15' text-anchor='middle' fill='%23334'&gt;tapered hole radii&lt;/text&gt;&lt;/svg&gt;"
+       alt="Nanobeam schematic" width="520" height="180">
+  <figcaption>Figure 1. Schematic of the tapered nanobeam cavity. The hole radius is reduced quadratically
+  toward the centre to create a gentle confinement potential.</figcaption>
+</figure>
+
+<h2>2. Design and Simulation</h2>
+<p>The cavity was designed using three-dimensional finite-difference time-domain simulations. A quadratic
+taper of the hole radius over twelve periods produces a Gaussian-like field envelope, which suppresses
+out-of-plane radiation losses.</p>
+
+<table>
+  <caption>Table 1. Simulated versus measured cavity parameters.</caption>
+  <thead><tr><th>Parameter</th><th>Simulated</th><th>Measured</th></tr></thead>
+  <tbody>
+    <tr><td>Quality factor</td><td>2.4 × 10<sup>6</sup></td><td>1.2 × 10<sup>6</sup></td></tr>
+    <tr><td>Resonant wavelength</td><td>1549.2 nm</td><td>1551.7 nm</td></tr>
+    <tr><td>Mode volume</td><td>0.66 (&lambda;/n)<sup>3</sup></td><td>&mdash;</td></tr>
+  </tbody>
+</table>
+
+<h2>3. Results</h2>
+<ul>
+  <li>Devices were fabricated on a 220 nm silicon-on-insulator wafer using electron-beam lithography.</li>
+  <li>The measured linewidth of 1.3 pm corresponds to a loaded quality factor of 1.2 million.</li>
+  <li>Thermal tuning of 0.08 nm/K was observed, consistent with the thermo-optic coefficient of silicon.</li>
+</ul>
+
+<p>已經是中文的段落不應該被重複翻譯，這一段是用來測試中文偵測的。</p>
+
+<h2>4. Conclusion</h2>
+<p>We have demonstrated nanobeam cavities with record quality factors in a CMOS-compatible platform.
+Future work will integrate microfluidic channels for label-free biosensing.</p>
+
+<footer><p>© 2026 Test Journal. All rights reserved.</p></footer>
+
+<div id="devbar" data-pl-ui="1">
+  <b>PaperLens 測試台</b>
+  <button id="dev-on">啟動對照 activate()</button>
+  <button id="dev-all">翻譯全文</button>
+  <button id="dev-hl">標記第一段前 40 字</button>
+  <button id="dev-exp">收集匯出內容</button>
+  <button id="dev-off">關閉 deactivate()</button>
+  <div id="devout"></div>
+</div>
+
+<script>
+/* ── 假的 chrome API，讓 content script 可以在純網頁裡跑 ── */
+(function () {
+  const store = {};
+  const listeners = [];
+
+  function fakeZh(t) {
+    // 保留 ⟦n⟧ 佔位符，其餘字串前面加標記，用來驗證回填是否正確
+    return '〔譯〕' + t;
+  }
+
+  globalThis.chrome = {
+    runtime: {
+      lastError: undefined,
+      id: 'testbed',
+      getManifest: () => ({ version: '0.1.0-test' }),
+      onMessage: { addListener: (fn) => listeners.push(fn) },
+      sendMessage(msg, cb) {
+        let data = null;
+        try {
+          if (msg.type === 'ai.detect') data = { lang: 'en' };
+          else if (msg.type === 'ai.probe') data = { where: 'testbed', translator: 'unsupported', languageModel: 'unsupported' };
+          else if (msg.type === 'ai.translate') throw new Error('testbed 沒有內建 AI');
+          else if (msg.type === 'translate.remote') data = { engine: 'testbed', result: msg.texts.map(fakeZh) };
+          else if (msg.type === 'ai.explain') data = { text: '重點：測試用的假解釋。\n細節：這是 testbed。\n名詞：無', via: 'testbed' };
+          else if (msg.type === 'export.open') {
+            globalThis.__lastExport = msg.payload;
+            fetch('/__export', { method: 'POST', body: JSON.stringify(msg.payload) }).catch(() => {});
+            data = { tabId: -1 };
+          }
+          else if (msg.type === 'settings.get') data = Object.assign({}, globalThis.PL_DEFAULTS);
+          else if (msg.type === 'settings.set') data = Object.assign({}, globalThis.PL_DEFAULTS, msg.patch);
+          else if (msg.type === 'openOptions') data = true;
+          else data = null;
+        } catch (e) {
+          setTimeout(() => { chrome.runtime.lastError = { message: e.message }; cb && cb(null); chrome.runtime.lastError = undefined; }, 0);
+          return;
+        }
+        setTimeout(() => cb && cb({ ok: true, data }), 0);
+      }
+    },
+    storage: {
+      local: {
+        get: (keys) => Promise.resolve(
+          keys == null ? Object.assign({}, store)
+            : (typeof keys === 'string' ? (store[keys] !== undefined ? { [keys]: store[keys] } : {})
+              : Object.fromEntries([].concat(keys).filter((k) => store[k] !== undefined).map((k) => [k, store[k]])))
+        ),
+        set: (obj) => { Object.assign(store, obj); return Promise.resolve(); },
+        remove: (keys) => { [].concat(keys).forEach((k) => delete store[k]); return Promise.resolve(); },
+        getBytesInUse: () => Promise.resolve(JSON.stringify(store).length)
+      },
+      session: { get: () => Promise.resolve({}), set: () => Promise.resolve() }
+    }
+  };
+})();
+</script>
+
+<script src="../shared/defaults.js"></script>
+<script src="../shared/localai.js"></script>
+<script src="../shared/translator.js"></script>
+<script src="../content/core.js"></script>
+<script src="../content/split.js"></script>
+<script src="../content/translate.js"></script>
+<script src="../content/annotate.js"></script>
+<script src="../content/overlay.js"></script>
+<script src="../content/export.js"></script>
+<script src="../content/boot.js"></script>
+
+<script>
+(function () {
+  const out = document.getElementById('devout');
+  const log = (t) => { out.textContent = String(t); console.log('[testbed]', t); };
+
+  document.getElementById('dev-on').onclick = async () => {
+    await PL.activate();
+    log('active=' + PL.active + '　可翻段落=' + PL.blocks.filter(b => b.state !== 'skip').length
+      + '　跳過(已中文/無文字)=' + PL.blocks.filter(b => b.state === 'skip').length);
+  };
+  document.getElementById('dev-all').onclick = () => { PL.translateAll(); log('已排入全文翻譯'); };
+  document.getElementById('dev-hl').onclick = () => {
+    const b = PL.blocks.find(x => x.state === 'done') || PL.blocks[0];
+    const el = b.right;
+    const r = document.createRange();
+    const tn = document.createTreeWalker(el, NodeFilter.SHOW_TEXT).nextNode();
+    if (!tn) return log('找不到文字節點');
+    r.setStart(tn, 0); r.setEnd(tn, Math.min(40, tn.nodeValue.length));
+    const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r);
+    PL.highlightSelection(false);
+    log('註解數=' + PL.getAnnotations().length);
+  };
+  document.getElementById('dev-exp').onclick = async () => {
+    await PL.openExport();
+    const p = globalThis.__lastExport;
+    log(p ? ('匯出列數=' + p.rows.length + '　註解=' + p.notes.length
+      + '\n含圖片列=' + p.rows.filter(r => /<img/i.test(r.src)).length
+      + '\n含表格列=' + p.rows.filter(r => /<table/i.test(r.src)).length) : '沒有 payload');
+  };
+  document.getElementById('dev-off').onclick = () => { PL.deactivate(); log('已關閉，DOM 應還原'); };
+})();
+</script>
+
+</body>
+</html>

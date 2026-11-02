@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <title>PaperLens PDF</title>
+  <link rel="stylesheet" href="../content/pl.css">
+  <link rel="stylesheet" href="pdfview.css">
+</head>
+<body>
+
+<div id="pl-bar" data-pl-ui="1">
+  <span class="pl-brand">PaperLens</span>
+
+  <select id="pl-engine" title="翻譯引擎"></select>
+  <button id="pl-translate-all">翻譯全文</button>
+
+  <div class="pl-prog"><i></i></div>
+  <span class="pl-status">載入中…</span>
+
+  <span class="pl-spacer"></span>
+
+  <span class="pl-modes">
+    <button data-mode="both">對照</button>
+    <button data-mode="dst">僅譯文</button>
+    <button data-mode="src">僅原文</button>
+  </span>
+
+  <span class="pl-zoom">
+    <button id="pl-zoom-out" title="縮小">−</button>
+    <span id="pl-zoom-label">100%</span>
+    <button id="pl-zoom-in" title="放大">＋</button>
+  </span>
+
+  <select id="pl-cols" title="版面欄數（自動判斷錯誤時可手動指定）">
+    <option value="auto">版面：自動</option>
+    <option value="1">單欄</option>
+    <option value="2">雙欄</option>
+  </select>
+
+  <span class="pl-pageno"><span id="pl-page-cur">–</span>/<span id="pl-page-total">–</span></span>
+
+  <button id="pl-sync" class="pl-on">同步捲動</button>
+  <button id="pl-inkbtn" title="畫筆、圈選、箭頭、便利貼">標註</button>
+  <button id="pl-sidebtn">註解</button>
+  <button id="pl-export">匯出 PDF</button>
+  <button id="pl-options" title="設定">⚙</button>
+</div>
+
+<div id="pl-left" class="pl-pane">
+  <div id="pl-pages"></div>
+</div>
+<div id="pl-gutter" data-pl-ui="1" title="拖曳調整左右寬度，雙擊回到 50%"></div>
+<div id="pl-right" class="pl-pane">
+  <div id="pl-out"></div>
+</div>
+
+<!-- 還沒載入檔案時的畫面 -->
+<div id="pl-drop" data-pl-ui="1">
+  <div class="box">
+    <h1>PaperLens PDF 對照閱讀</h1>
+    <p id="pl-drop-msg">把 PDF 檔拖進來，或按下面的按鈕選擇。</p>
+    <button id="pl-pick">選擇 PDF 檔案…</button>
+    <input type="file" id="pl-file" accept="application/pdf" hidden>
+    <p class="hint" id="pl-drop-hint"></p>
+  </div>
+</div>
+
+<script src="../vendor/pdf.min.js"></script>
+<script src="../shared/defaults.js"></script>
+<script src="../shared/localai.js"></script>
+<script src="../shared/translator.js"></script>
+<script src="../content/core.js"></script>
+<script src="../content/annotate.js"></script>
+<script src="../content/overlay.js"></script>
+<script src="pdfview.js"></script>
+</body>
+</html>

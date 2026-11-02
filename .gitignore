@@ -1,0 +1,6 @@
+dist/
+.claude/
+tools/.sample-export.json
+*.bak
+Thumbs.db
+.DS_Store

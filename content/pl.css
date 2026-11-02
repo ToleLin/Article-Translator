@@ -1,0 +1,420 @@
+/* PaperLens — 注入到網頁的樣式
+ * 原則：所有選擇器都以 pl- 開頭，並用 !important 覆蓋原站樣式，離開時可完全還原。
+ */
+
+:root {
+  --pl-bar-h: 44px;
+  --pl-accent: #4f46e5;
+  --pl-bg: #ffffff;
+  --pl-fg: #1f2330;
+  --pl-muted: #6b7280;
+  --pl-line: #e3e5ec;
+  --pl-panel: #f7f8fb;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --pl-bg: #16181d;
+    --pl-fg: #e8eaf0;
+    --pl-muted: #9aa2b1;
+    --pl-line: #2c3038;
+    --pl-panel: #1d2027;
+  }
+}
+
+/* ══════════ 分欄容器 ══════════ */
+
+html.pl-active,
+html.pl-active > body {
+  height: 100% !important;
+  max-height: 100% !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+html.pl-active > body {
+  display: flex !important;
+  flex-direction: row !important;
+  align-items: stretch !important;
+  width: 100% !important;
+  max-width: none !important;
+  padding-top: var(--pl-bar-h) !important;
+  box-sizing: border-box !important;
+  gap: 0 !important;
+}
+
+html.pl-active .pl-pane {
+  flex: 1 1 0;
+  min-width: 0;
+  height: calc(100vh - var(--pl-bar-h));
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box;
+  /* transform 讓頁面內原本 position:fixed 的元素改以本欄為定位基準，
+     不會蓋到另一欄，也不會浮在工具列上 */
+  transform: translateZ(0);
+  contain: paint;
+  scrollbar-width: thin;
+  /* 一定要用「原頁面自己的底色」，不能用我們的深／淺色主題。
+     不然在淺色網站 + 系統深色模式下，我們會把底畫成深色，
+     而網站的深色文字就整個糊進背景裡看不見。 */
+  background: var(--pl-page-bg, #ffffff);
+}
+
+html.pl-active .pl-pane::-webkit-scrollbar { width: 10px; }
+html.pl-active .pl-pane::-webkit-scrollbar-thumb {
+  background: rgba(120, 130, 150, .35); border-radius: 6px;
+}
+
+/* 左欄吃固定比例、右欄吃剩下的。右欄若用 flex-basis:auto，
+   它的內容寬度會把比例整個算歪，所以這裡明確寫成 0。 */
+html.pl-active #pl-left  { flex: 0 0 var(--pl-left-w, 50%); }
+html.pl-active #pl-right { flex: 1 1 0; border-left: 1px solid var(--pl-line); }
+
+html.pl-active.pl-only-dst #pl-right,
+html.pl-active.pl-only-src #pl-left { flex: 1 1 100%; }
+
+html.pl-active.pl-dim #pl-left { opacity: .72; }
+
+/* 只看單邊 */
+html.pl-active.pl-only-dst #pl-left  { display: none !important; }
+html.pl-active.pl-only-src #pl-right { display: none !important; }
+html.pl-active.pl-only-dst #pl-gutter,
+html.pl-active.pl-only-src #pl-gutter { display: none !important; }
+
+/* 拖曳分隔線 */
+#pl-gutter {
+  flex: 0 0 6px;
+  height: calc(100vh - var(--pl-bar-h));
+  cursor: col-resize;
+  background: var(--pl-line);
+  position: relative;
+  z-index: 5;
+}
+#pl-gutter::after {
+  content: '';
+  position: absolute; inset: 0 -4px;
+}
+#pl-gutter:hover, #pl-gutter.pl-dragging { background: var(--pl-accent); }
+
+/* ══════════ 頂部工具列 ══════════ */
+
+#pl-bar {
+  position: fixed !important;
+  top: 0; left: 0; right: 0;
+  height: var(--pl-bar-h);
+  z-index: 2147483600;
+  display: flex; align-items: center; gap: 6px;
+  padding: 0 10px;
+  box-sizing: border-box;
+  background: var(--pl-panel);
+  border-bottom: 1px solid var(--pl-line);
+  color: var(--pl-fg);
+  font: 13px/1.4 system-ui, "Segoe UI", "Microsoft JhengHei", sans-serif;
+  box-shadow: 0 1px 6px rgba(0,0,0,.06);
+}
+
+#pl-bar .pl-brand {
+  font-weight: 700; letter-spacing: .3px; margin-right: 4px;
+  color: var(--pl-accent); white-space: nowrap;
+}
+
+#pl-bar button, #pl-bar select {
+  font: inherit;
+  color: var(--pl-fg);
+  background: var(--pl-bg);
+  border: 1px solid var(--pl-line);
+  border-radius: 7px;
+  padding: 5px 9px;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 1.2;
+}
+#pl-bar button:hover { border-color: var(--pl-accent); color: var(--pl-accent); }
+#pl-bar button.pl-on { background: var(--pl-accent); border-color: var(--pl-accent); color: #fff; }
+#pl-bar button[disabled] { opacity: .45; cursor: default; }
+#pl-bar .pl-spacer { flex: 1 1 auto; }
+#pl-bar .pl-modes { display: inline-flex; gap: 4px; flex: 0 0 auto; }
+#pl-bar > * { flex: 0 0 auto; }
+
+/* 視窗變窄時先犧牲進度條與字樣，但絕不換行擠成兩排 */
+@media (max-width: 1120px) {
+  #pl-bar .pl-prog { display: none; }
+}
+@media (max-width: 900px) {
+  #pl-bar .pl-status { display: none; }
+  #pl-bar { gap: 4px; padding: 0 6px; }
+  #pl-bar button, #pl-bar select { padding: 5px 7px; }
+}
+
+#pl-bar .pl-status { color: var(--pl-muted); font-size: 12px; white-space: nowrap; }
+#pl-bar .pl-prog {
+  width: 90px; height: 5px; border-radius: 3px;
+  background: var(--pl-line); overflow: hidden;
+}
+#pl-bar .pl-prog > i { display: block; height: 100%; width: 0%; background: var(--pl-accent); transition: width .2s; }
+
+/* ══════════ 譯文排版 ══════════ */
+
+#pl-right [data-pl-b][data-pl-done] {
+  font-family: var(--pl-trans-font) !important;
+  line-height: var(--pl-trans-lh, 1.9) !important;
+  letter-spacing: .2px;
+  text-align: justify;
+  word-break: break-word;
+}
+
+#pl-right [data-pl-b][data-pl-state="pending"] { opacity: .45; }
+#pl-right [data-pl-b][data-pl-state="working"] {
+  opacity: .6;
+  background: linear-gradient(90deg, transparent, rgba(79,70,229,.09), transparent);
+  background-size: 220% 100%;
+  animation: pl-shimmer 1.1s linear infinite;
+}
+@keyframes pl-shimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
+
+#pl-right [data-pl-b][data-pl-state="error"] {
+  outline: 1px dashed rgba(220, 80, 80, .6);
+  outline-offset: 2px;
+}
+
+/* 被替換掉的 iframe / video 佔位。
+   它落在「原頁面內容」裡，所以配色要跟著原頁面走，用半透明灰而不是主題色。 */
+.pl-placeholder {
+  display: block; border: 1px dashed rgba(128, 132, 145, .45); border-radius: 8px;
+  padding: 14px; text-align: center;
+  color: inherit; opacity: .6;
+  font: 12px system-ui, sans-serif;
+  background: rgba(128, 132, 145, .08);
+}
+
+/* ══════════ 螢光筆 ══════════ */
+
+mark.pl-hl {
+  background: var(--pl-hl-bg, rgba(255,214,0,.45)) !important;
+  color: inherit !important;
+  padding: 0 1px; border-radius: 2px;
+  box-decoration-break: clone; -webkit-box-decoration-break: clone;
+  cursor: pointer;
+}
+mark.pl-hl[data-pl-note="1"] {
+  border-bottom: 2px solid var(--pl-hl-line, #f0b400) !important;
+}
+mark.pl-hl.pl-hl-focus {
+  outline: 2px solid var(--pl-accent); outline-offset: 1px;
+}
+
+/* ══════════ 選字小工具列 ══════════ */
+
+#pl-sel {
+  position: fixed; z-index: 2147483640;
+  display: none; align-items: center; gap: 4px;
+  padding: 5px 6px;
+  background: var(--pl-bg); color: var(--pl-fg);
+  border: 1px solid var(--pl-line); border-radius: 10px;
+  box-shadow: 0 6px 22px rgba(0,0,0,.18);
+  font: 12px system-ui, "Microsoft JhengHei", sans-serif;
+}
+#pl-sel.pl-show { display: flex; }
+#pl-sel button {
+  font: inherit; border: none; background: transparent; color: var(--pl-fg);
+  padding: 4px 7px; border-radius: 6px; cursor: pointer;
+}
+#pl-sel button:hover { background: var(--pl-panel); }
+#pl-sel .pl-swatch {
+  width: 17px; height: 17px; border-radius: 50%;
+  border: 1px solid rgba(0,0,0,.16); padding: 0; cursor: pointer;
+}
+#pl-sel .pl-div { width: 1px; height: 18px; background: var(--pl-line); margin: 0 3px; }
+
+/* ══════════ 註解泡泡 ══════════ */
+
+#pl-pop {
+  position: fixed; z-index: 2147483645;
+  display: none; flex-direction: column; gap: 8px;
+  width: 340px; max-width: calc(100vw - 24px);
+  min-width: 260px; min-height: 180px;
+  resize: both; overflow: auto;
+  padding: 12px;
+  background: var(--pl-bg); color: var(--pl-fg);
+  border: 1px solid var(--pl-line); border-radius: 12px;
+  box-shadow: 0 10px 34px rgba(0,0,0,.22);
+  font: 13px/1.6 system-ui, "Microsoft JhengHei", sans-serif;
+}
+#pl-pop.pl-show { display: flex; }
+#pl-pop .pl-quote {
+  max-height: 88px; overflow: auto;
+  padding: 7px 9px; border-left: 3px solid var(--pl-accent);
+  background: var(--pl-panel); border-radius: 0 6px 6px 0;
+  font-size: 12px; color: var(--pl-muted);
+}
+#pl-pop textarea {
+  width: 100%; min-height: 76px; resize: vertical;
+  font: inherit; color: var(--pl-fg);
+  background: var(--pl-bg); border: 1px solid var(--pl-line);
+  border-radius: 8px; padding: 7px 9px; box-sizing: border-box;
+}
+#pl-pop .pl-ai {
+  max-height: 200px; overflow: auto;
+  padding: 8px 10px; border-radius: 8px;
+  background: var(--pl-panel); font-size: 12.5px; white-space: pre-wrap;
+}
+#pl-pop .pl-row { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+#pl-pop button {
+  font: inherit; cursor: pointer;
+  border: 1px solid var(--pl-line); background: var(--pl-bg); color: var(--pl-fg);
+  border-radius: 8px; padding: 5px 10px;
+}
+#pl-pop button:hover { border-color: var(--pl-accent); color: var(--pl-accent); }
+#pl-pop button.pl-primary { background: var(--pl-accent); border-color: var(--pl-accent); color: #fff; }
+#pl-pop button.pl-danger:hover { border-color: #dc2626; color: #dc2626; }
+#pl-pop .pl-swatch { width: 17px; height: 17px; border-radius: 50%; border: 1px solid rgba(0,0,0,.16); padding: 0; }
+#pl-pop .pl-swatch.pl-cur { outline: 2px solid var(--pl-accent); outline-offset: 1px; }
+
+/* ══════════ 註解側欄 ══════════ */
+
+#pl-side {
+  position: fixed; top: var(--pl-bar-h); right: 0; bottom: 0;
+  width: 320px; z-index: 2147483590;
+  display: none; flex-direction: column;
+  background: var(--pl-panel); color: var(--pl-fg);
+  border-left: 1px solid var(--pl-line);
+  font: 13px/1.6 system-ui, "Microsoft JhengHei", sans-serif;
+}
+html.pl-side-open #pl-side { display: flex; }
+html.pl-side-open > body { padding-right: 320px !important; }
+
+#pl-side header {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-bottom: 1px solid var(--pl-line); font-weight: 600;
+}
+#pl-side header .pl-spacer { flex: 1; }
+#pl-side header button {
+  font: inherit; border: 1px solid var(--pl-line); background: var(--pl-bg);
+  color: var(--pl-fg); border-radius: 7px; padding: 3px 8px; cursor: pointer;
+}
+#pl-side .pl-list { flex: 1; overflow: auto; padding: 8px; }
+#pl-side .pl-item {
+  padding: 9px 10px; margin-bottom: 8px; cursor: pointer;
+  background: var(--pl-bg); border: 1px solid var(--pl-line);
+  border-left: 4px solid var(--pl-hl-line, #f0b400); border-radius: 9px;
+}
+#pl-side .pl-item:hover { border-color: var(--pl-accent); }
+#pl-side .pl-item .pl-ex { font-size: 12.5px; }
+#pl-side .pl-item .pl-nt { margin-top: 5px; font-size: 12px; color: var(--pl-accent); white-space: pre-wrap; }
+#pl-side .pl-item .pl-meta { margin-top: 5px; font-size: 11px; color: var(--pl-muted); }
+#pl-side .pl-empty { padding: 26px 14px; text-align: center; color: var(--pl-muted); font-size: 12.5px; }
+
+/* ══════════ 提示訊息 ══════════ */
+
+#pl-toast {
+  position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%);
+  z-index: 2147483646; max-width: 72vw;
+  padding: 10px 16px; border-radius: 10px;
+  background: rgba(24,26,32,.94); color: #fff;
+  font: 13px/1.5 system-ui, "Microsoft JhengHei", sans-serif;
+  box-shadow: 0 8px 26px rgba(0,0,0,.3);
+  opacity: 0; pointer-events: none; transition: opacity .18s;
+  white-space: pre-wrap;
+}
+#pl-toast.pl-show { opacity: 1; }
+
+/* 列印時我們的 UI 一律不出現（PDF 由獨立分頁產生，這只是保險） */
+@media print {
+  #pl-bar, #pl-sel, #pl-pop, #pl-side, #pl-toast, #pl-gutter { display: none !important; }
+}
+
+/* ══════════ 手寫標註圖層 ══════════ */
+
+.pl-ovl {
+  position: absolute;
+  left: 0; top: 0; right: 0;
+  pointer-events: none;
+  z-index: 30;
+}
+.pl-ovl.pl-active-layer { pointer-events: auto; cursor: crosshair; }
+html.pl-drawing .pl-pane { user-select: none; }
+
+/* 不用 viewBox：讓 SVG 直接用 CSS 像素當單位，
+   欄寬還沒量到（例如分頁在背景）時也不會整層塌掉 */
+.pl-ovl-svg {
+  position: absolute; left: 0; top: 0;
+  width: 100%; height: 100%;
+  overflow: visible;
+}
+.pl-ovl-notes { position: absolute; left: 0; top: 0; right: 0; }
+
+/* ══════════ 便利貼 ══════════ */
+
+.pl-sticky {
+  position: absolute;
+  min-width: 130px; min-height: 90px;
+  display: flex; flex-direction: column;
+  pointer-events: auto;
+  resize: both; overflow: hidden;
+  border-radius: 10px;
+  border: 1px solid rgba(0, 0, 0, .16);
+  background: var(--pl-sticky, #f59e0b);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, .26);
+  z-index: 40;
+}
+.pl-sticky-bar {
+  display: flex; align-items: center; gap: 4px;
+  padding: 3px 5px;
+  background: rgba(0, 0, 0, .16);
+  cursor: move;
+  font: 12px system-ui, sans-serif; color: #fff;
+}
+.pl-sticky-bar button {
+  border: 0; background: transparent; color: #fff;
+  cursor: pointer; padding: 1px 5px; border-radius: 5px; font: inherit; line-height: 1;
+}
+.pl-sticky-bar button:hover { background: rgba(255, 255, 255, .22); }
+.pl-sticky-grip { opacity: .8; }
+.pl-sticky textarea {
+  flex: 1; width: 100%; box-sizing: border-box;
+  border: 0; outline: none; resize: none;
+  padding: 7px 9px;
+  background: transparent; color: #fff;
+  font: 13px/1.55 system-ui, "Microsoft JhengHei", sans-serif;
+}
+.pl-sticky textarea::placeholder { color: rgba(255, 255, 255, .65); }
+
+/* ══════════ 標註工具面板 ══════════ */
+
+#pl-palette {
+  position: fixed; right: 12px; top: calc(var(--pl-bar-h) + 14px);
+  z-index: 2147483610;
+  display: none; flex-direction: column; gap: 4px;
+  padding: 7px 6px;
+  background: var(--pl-bg); color: var(--pl-fg);
+  border: 1px solid var(--pl-line); border-radius: 12px;
+  box-shadow: 0 8px 26px rgba(0, 0, 0, .22);
+}
+#pl-palette.pl-show { display: flex; }
+#pl-palette button {
+  width: 34px; height: 30px;
+  font: 15px/1 system-ui, sans-serif;
+  border: 1px solid transparent; border-radius: 8px;
+  background: transparent; color: var(--pl-fg);
+  cursor: pointer;
+}
+#pl-palette button:hover { background: var(--pl-panel); }
+#pl-palette button.pl-on { background: var(--pl-accent); color: #fff; }
+#pl-palette .pl-pal-color { height: 20px; border-radius: 6px; }
+#pl-palette .pl-pal-color.pl-cur { outline: 2px solid var(--pl-accent); outline-offset: 1px; }
+#pl-palette .pl-pal-danger:hover { background: #fee2e2; color: #b91c1c; }
+#pl-palette .pl-pal-div { height: 1px; background: var(--pl-line); margin: 3px 2px; }
+
+/* ══════════ 可調整寬度的註解側欄 ══════════ */
+
+#pl-side { width: var(--pl-side-w, 320px); }
+html.pl-side-open > body { padding-right: var(--pl-side-w, 320px) !important; }
+
+#pl-side-grip {
+  position: absolute; left: -3px; top: 0; bottom: 0; width: 7px;
+  cursor: col-resize; z-index: 2;
+}
+#pl-side-grip:hover, #pl-side-grip.pl-dragging { background: var(--pl-accent); }
