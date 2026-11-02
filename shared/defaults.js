@@ -17,7 +17,8 @@
     /* --- 行為 --- */
     autoTranslate: true,            // 開啟對照後自動開始翻譯
     autoPdf: false,                 // 開啟 PDF 網址時自動換成 PaperLens 的 PDF 檢視器
-    lazyTranslate: true,            // 只翻視窗附近的段落，捲到哪翻到哪
+    lazyTranslate: true,            // 先翻視窗附近的段落，捲到哪翻到哪
+    bgTranslate: true,              // 看得到的翻完之後，在背景把整篇補完（PDF）
     syncScroll: true,
     splitRatio: 0.5,                // 左欄寬度比例
     skipChinese: true,              // 已經是中文的段落不翻

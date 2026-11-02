@@ -108,29 +108,40 @@
     return side === 'left' ? b.left : b.right;
   }
 
+  /** 在一個段落裡找到這則註解的位置；找不到回傳 null */
+  function locate(block, ann) {
+    const text = block.textContent;
+    if (text.slice(ann.start, ann.end) === ann.exact) return [ann.start, ann.end];
+    if (!ann.exact) return null;
+    let idx = -1;
+    // 先用前後文定位，避免同一段裡有重複字串時標錯地方
+    if (ann.prefix) {
+      const p = text.indexOf(ann.prefix + ann.exact);
+      if (p >= 0) idx = p + ann.prefix.length;
+    }
+    if (idx < 0) idx = text.indexOf(ann.exact);
+    return idx < 0 ? null : [idx, idx + ann.exact.length];
+  }
+
   /** 重新把一則註解畫回頁面上；位置對不上時用原文比對救回來 */
   function apply(ann) {
-    const block = blockOf(ann.side, ann.block);
+    let block = blockOf(ann.side, ann.block);
     if (!block) { ann.orphan = true; return false; }
 
-    const text = block.textContent;
-    let start = ann.start, end = ann.end;
-
-    if (text.slice(start, end) !== ann.exact) {
-      let idx = -1;
-      if (ann.exact) {
-        // 先用前後文定位，避免同一段裡有重複字串時標錯地方
-        if (ann.prefix) {
-          const p = text.indexOf(ann.prefix + ann.exact);
-          if (p >= 0) idx = p + ann.prefix.length;
-        }
-        if (idx < 0) idx = text.indexOf(ann.exact);
+    let pos = locate(block, ann);
+    if (!pos && ann.exact && ann.exact.length >= 4) {
+      /* 段落編號變了（例如 PDF 版面分析改版、重新分段）：
+         原本那一段已經畫出來、卻找不到這段字，就到其他已經畫出來的段落找，找到就改掛過去 */
+      for (const b of PL.blocks) {
+        const el = ann.side === 'left' ? b.left : b.right;
+        if (!el || el === block) continue;
+        const p = locate(el, ann);
+        if (p) { block = el; pos = p; ann.block = b.i; persist(); break; }
       }
-      if (idx < 0) { ann.orphan = true; return false; }
-      start = idx; end = idx + ann.exact.length;
     }
+    if (!pos) { ann.orphan = true; return false; }
 
-    const range = rangeFromOffsets(block, start, end);
+    const range = rangeFromOffsets(block, pos[0], pos[1]);
     if (!range) { ann.orphan = true; return false; }
     ann.orphan = !paint(ann, range);
     return !ann.orphan;
@@ -227,10 +238,21 @@
   function deleteAnnotation(ann) {
     unpaint(ann.id);
     store.items = store.items.filter((a) => a.id !== ann.id);
+    if (current && current.id === ann.id) closePopup();
     persist();
     renderSidebar();
   }
   PL.deleteAnnotation = deleteAnnotation;
+
+  /** 復原用：把刪掉的註解放回去（橡皮擦擦掉螢光筆之後按 Ctrl+Z） */
+  PL.restoreAnnotation = function (ann) {
+    if (!ann || store.items.some((a) => a.id === ann.id)) return;
+    const copy = Object.assign({}, ann);
+    store.items.push(copy);
+    apply(copy);
+    persist();
+    renderSidebar();
+  };
 
   /* ══════════ 選字小工具列 ══════════ */
 
@@ -498,12 +520,28 @@
     list.textContent = '';
 
     const items = store.items.slice().sort((a, b) => (a.block - b.block) || (a.start - b.start));
-    if (!items.length) {
+    const notes = (PL.Overlay && PL.Overlay.notes) ? PL.Overlay.notes().filter((n) => (n.text || '').trim() || n.kind === 'sticky') : [];
+    if (!items.length && !notes.length) {
       list.appendChild(PL.el('div', {
         class: 'pl-empty',
-        text: '還沒有註解。\n在任一欄選取文字，就會跳出螢光筆與心得按鈕。'
+        text: '還沒有註解。\n在任一欄選取文字，就會跳出螢光筆與心得按鈕；\n或打開「標註」工具列，用「便利貼」在任何地方貼一張。'
       }));
       return;
+    }
+
+    // 便利貼、文字方塊也列在這裡，點一下就捲過去
+    if (notes.length) {
+      list.appendChild(PL.el('div', { class: 'pl-sec', text: '便利貼與文字（' + notes.length + '）' }));
+      for (const n of notes) {
+        const item = PL.el('div', { class: 'pl-item pl-note-item' });
+        item.style.borderLeftColor = n.kind === 'sticky' ? '#d4a017' : (n.color || '#888');
+        item.appendChild(PL.el('div', { class: 'pl-ex', text: (n.kind === 'sticky' ? '🗒 ' : '✎ ') + ((n.text || '').trim().slice(0, 160) || '（空白便利貼）') }));
+        const where = /^p\d+$/.test(String(n.anchor)) ? '第 ' + String(n.anchor).slice(1) + ' 頁' : '第 ' + (Number(String(n.anchor).slice(1)) + 1) + ' 段';
+        item.appendChild(PL.el('div', { class: 'pl-meta', text: (n.side === 'right' ? '譯文' : '原文') + ' · ' + where }));
+        item.addEventListener('click', () => PL.Overlay.focus(n.id));
+        list.appendChild(item);
+      }
+      if (items.length) list.appendChild(PL.el('div', { class: 'pl-sec', text: '螢光筆與心得（' + items.length + '）' }));
     }
 
     for (const ann of items) {

@@ -78,6 +78,19 @@
     svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none';
 
     for (const it of items) {
+      if (it.kind === 'text') {
+        // 文字方塊：位置是相對於段落方框的比例，字級是相對於段落寬度
+        if (!(it.text || '').trim() || !it.pos) continue;
+        col.style.containerType = 'inline-size';
+        const t = document.createElement('div');
+        t.textContent = it.text;
+        t.style.cssText = 'position:absolute;white-space:pre-wrap;font-weight:600;line-height:1.35;pointer-events:none;'
+          + 'text-shadow:0 0 2px #fff,0 0 2px #fff;font-family:system-ui,"Microsoft JhengHei",sans-serif;'
+          + 'left:' + (it.pos[0] * 100) + '%;top:' + (it.pos[1] * 100) + '%;color:' + (it.color || '#ef4444')
+          + ';font-size:' + Math.max(0.5, (it.fs || 0.03) * 100) + 'cqw';
+        col.appendChild(t);
+        continue;
+      }
       const pts = it.pts || [];
       if (pts.length < 2) continue;
       const a = pts[0], b = pts[pts.length - 1];

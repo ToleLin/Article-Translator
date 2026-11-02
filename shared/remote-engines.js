@@ -168,7 +168,7 @@
   }
 
   function bingTranslate(texts, src, tgt) {
-    return batched(texts, { maxItems: 6, maxChars: 2500, one: (t) => bingOnce(t, src, tgt) });
+    return batched(texts, { maxItems: 8, maxChars: 3000, concurrency: 2, one: (t) => bingOnce(t, src, tgt) });
   }
 
   async function edgeTranslate(texts, src, tgt) {
@@ -235,13 +235,29 @@
 
   /* ══════════ 共用的分批邏輯 ══════════ */
 
+  /** 同時最多跑 n 個 */
+  async function parallel(items, n, fn) {
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < items.length) {
+        const k = cursor++;
+        await fn(items[k], k);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+  }
+
   /**
-   * 把多段合併成一次請求（換行分隔），回來再拆開；
-   * 拆不對就退回逐段送，確保不會張冠李戴。
+   * 把多段合併成一次請求（換行分隔），回來再拆開。
+   *
+   * - 拆出來的段數對不上（引擎把兩行併成一行之類）→ 這一組改成逐段送，但三段同時送，不要一段等一段
+   * - 請求本身失敗（429、401、網路斷線）→ 直接往上丟，讓呼叫端換下一個引擎；
+   *   舊版會對同一個已經壞掉的引擎再逐段重試一輪，白白多等好幾秒
    */
   async function batched(texts, opt) {
-    const out = new Array(texts.length);
+    const out = new Array(texts.length).fill(null);
     const SEP = '\n';
+    const groups = [];
     let i = 0;
 
     while (i < texts.length) {
@@ -257,33 +273,29 @@
         if (group.length === 1 && group[0].text.includes(SEP)) break;
       }
       if (!group.length) { group.push({ idx: i, text: texts[i] }); i++; }
-
-      if (group.length === 1) {
-        out[group[0].idx] = await opt.one(group[0].text);
-        continue;
-      }
-
-      let parts = null;
-      try {
-        const r = await opt.one(group.map((x) => x.text).join(SEP));
-        const split = r.split(/\r?\n/);
-        if (split.length === group.length) parts = split;
-      } catch (e) {
-        if (opt.abortOnBatchError && opt.abortOnBatchError(e)) throw e;
-      }
-
-      if (parts) {
-        group.forEach((x, k) => { out[x.idx] = parts[k]; });
-      } else {
-        for (const x of group) {
-          try { out[x.idx] = await opt.one(x.text); }
-          catch (e) {
-            if (opt.abortOnBatchError && opt.abortOnBatchError(e)) throw e;
-            out[x.idx] = null;
-          }
-        }
-      }
+      groups.push(group);
     }
+
+    let lastErr = null, okCount = 0;
+    await parallel(groups, opt.concurrency || 2, async (group) => {
+      if (group.length === 1) {
+        try { out[group[0].idx] = await opt.one(group[0].text); okCount++; }
+        catch (e) { lastErr = e; if (opt.abortOnBatchError && opt.abortOnBatchError(e)) throw e; }
+        return;
+      }
+      const r = await opt.one(group.map((x) => x.text).join(SEP));     // 失敗就整個往上丟
+      okCount++;
+      const split = String(r).split(/\r?\n/);
+      if (split.length === group.length) {
+        group.forEach((x, k) => { out[x.idx] = split[k]; });
+        return;
+      }
+      await parallel(group, 3, async (x) => {
+        try { out[x.idx] = await opt.one(x.text); }
+        catch (e) { lastErr = e; if (opt.abortOnBatchError && opt.abortOnBatchError(e)) throw e; }
+      });
+    });
+    if (!okCount && lastErr) throw lastErr;
     return out;
   }
 

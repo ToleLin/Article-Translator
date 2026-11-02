@@ -254,6 +254,7 @@
     bindCheck('skipChinese');
     bindCheck('autoTranslate');
     bindCheck('lazyTranslate');
+    bindCheck('bgTranslate');
     bindCheck('syncScroll');
     bindCheck('dimOriginal');
     bindCheck('showSidebar');

@@ -180,7 +180,7 @@ const handlers = {
     const s = await PL_loadSettings();
     const src = msg.sourceLang && msg.sourceLang !== 'auto' ? PL_mapLang('chrome', msg.sourceLang) : 'en';
     const tgt = msg.targetCode || PL_mapLang('chrome', msg.targetLang || s.targetLang);
-    const result = await PLLocalAI.translateMany(msg.texts, src, tgt, { concurrency: 3 });
+    const result = await PLLocalAI.translateMany(msg.texts, src, tgt, { concurrency: 3, chunk: 350 });
     return { engine: 'chrome', result };
   },
 

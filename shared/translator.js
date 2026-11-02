@@ -245,7 +245,7 @@
     else if (chromeState === 'warming') warmChrome();
   };
 
-  async function chromeTranslate(texts) {
+  async function chromeTranslate(texts, onItem) {
     if (chromeSide === null) {
       ensureProbe();      // 背景探測，這一批先讓給遠端引擎
       throw new Error('內建 AI 還在探測中');
@@ -262,15 +262,17 @@
 
     const { src, tgt } = chromeLangs();
     const s = cfg.getSettings();
+    // 裝置上的小模型一次吃太長容易漏句：切成幾句一組送，翻好一段就先回報一段
+    const timeout = ENGINE_TIMEOUT + texts.reduce((a, t) => a + t.length, 0) * 15;
     if (chromeSide === 'page') {
       const result = await withTimeout(
-        g.PLLocalAI.translateMany(texts, src, tgt, { concurrency: 3 }),
-        ENGINE_TIMEOUT, 'Chrome 內建翻譯');
+        g.PLLocalAI.translateMany(texts, src, tgt, { concurrency: 3, chunk: 350, onItem }),
+        timeout, 'Chrome 內建翻譯');
       return { engine: 'chrome', result };
     }
     return withTimeout(
       send({ type: 'ai.translate', texts, sourceLang: src, targetCode: tgt, targetLang: s.targetLang }),
-      ENGINE_TIMEOUT, 'Chrome 內建翻譯');
+      timeout, 'Chrome 內建翻譯');
   }
 
   /* ══════════ 對外：翻譯一批字串 ══════════ */
@@ -288,24 +290,32 @@
     return order.length ? order : ['edge'];
   };
 
-  T.translate = async function (texts) {
+  async function runEngine(eng, texts, onItem) {
     const s = cfg.getSettings();
-    const failed = [];          // 每個引擎為什麼失敗都要留著，出錯時才講得清楚
+    if (eng === 'chrome') return chromeTranslate(texts, onItem);
+    return withTimeout(send({
+      type: 'translate.remote',
+      engine: eng,
+      texts,
+      sourceLang: T.sourceLang,
+      targetLang: s.targetLang
+    }), ENGINE_TIMEOUT, g.PL_ENGINE_LABEL[eng] || eng);
+  }
 
-    for (const eng of T.engineOrder()) {
+  /**
+   * 依引擎順序嘗試，第一個有回傳的就用。
+   * opts.onItem(n, text, engine)：逐段回報（目前只有內建 AI 做得到）
+   * opts.exclude：這幾個引擎不要用（重試時跳過剛剛翻壞的那一個）
+   */
+  T.translate = async function (texts, opts) {
+    opts = opts || {};
+    const failed = [];          // 每個引擎為什麼失敗都要留著，出錯時才講得清楚
+    const order = T.engineOrder().filter((e) => !(opts.exclude || []).includes(e));
+
+    for (const eng of order) {
       try {
-        let r;
-        if (eng === 'chrome') {
-          r = await chromeTranslate(texts);
-        } else {
-          r = await withTimeout(send({
-            type: 'translate.remote',
-            engine: eng,
-            texts,
-            sourceLang: T.sourceLang,
-            targetLang: s.targetLang
-          }), ENGINE_TIMEOUT, g.PL_ENGINE_LABEL[eng] || eng);
-        }
+        const onItem = opts.onItem ? (n, t) => opts.onItem(n, t, eng) : null;
+        const r = await runEngine(eng, texts, onItem);
         if (r && r.result && r.result.some((x) => x != null)) {
           T.lastEngine = r.engine;
           return r;
@@ -319,27 +329,95 @@
     throw new Error('所有引擎都失敗了 —— ' + failed.join('；'));
   };
 
-  /** 查快取 → 不足的才送翻；回傳與 texts 等長的譯文陣列（失敗的位置是 null） */
-  T.translateCached = async function (texts) {
+  /** 指定單一引擎、不查快取、不備援（「比較各引擎」用） */
+  T.translateWith = async function (engine, texts) {
+    await T.ensureSourceLang(texts.join(' '));
+    const r = await runEngine(engine, texts, null);
+    if (!r || !r.result) throw new Error('沒有回傳結果');
+    return r.result;
+  };
+
+  /* ══════════ 譯文檢查 ══════════
+     翻譯引擎偶爾會：原封不動退回英文、只翻前半段就停、或把整段吃掉只剩幾個字。
+     這種結果不能直接顯示（使用者會以為「少翻了」），要換下一個引擎重翻。 */
+
+  const CJK_RE = /[㐀-鿿豈-﫿぀-ヿ가-힯]/g;
+
+  T.checkResult = function (src, out, targetLang) {
+    if (out == null) return 'empty';
+    const t = String(out).trim();
+    if (!t) return 'empty';
+    const words = (src.match(/[A-Za-z]{3,}/g) || []).length;
+    if (/^(zh|ja|ko)/i.test(targetLang || '')) {
+      const cjk = (t.match(CJK_RE) || []).length;
+      if (words >= 4 && cjk === 0) return 'untranslated';
+      // 正常的英翻中，字數大約是原文字元數的 25%～60%；低到 12% 以下多半是只翻了一部分
+      if (src.length > 160 && t.length < src.length * 0.12) return 'truncated';
+    } else if (words >= 6 && t === src.trim()) {
+      return 'untranslated';
+    }
+    return null;
+  };
+
+  /**
+   * 查快取 → 不足的才送翻；回傳與 texts 等長的譯文陣列（失敗的位置是 null）。
+   * opts.onItem(i, text, engine)：每一段一確定就回報，讓畫面可以一段一段出來。
+   * 翻壞的段落（沒翻、只翻一半）會自動換下一個引擎再翻一次。
+   */
+  T.translateCached = async function (texts, opts) {
+    opts = opts || {};
     const lang = cfg.getSettings().targetLang;
     const out = await T.cacheGetMany(texts, lang);
+    const engines = new Array(texts.length).fill(null);
+    const done = new Set();
 
-    const need = [], needIdx = [];
+    const accept = (i, t, eng, cache) => {
+      if (done.has(i)) return true;
+      if (T.checkResult(texts[i], t, lang)) return false;
+      out[i] = t;
+      engines[i] = eng;
+      done.add(i);
+      if (cache) T.cachePut(texts[i], lang, t);
+      if (opts.onItem) { try { opts.onItem(i, t, eng); } catch (e) { /* 畫面端的錯誤不影響翻譯 */ } }
+      return true;
+    };
+
+    const need = [];
     texts.forEach((t, i) => {
-      if (out[i] == null) { need.push(t); needIdx.push(i); }
+      if (out[i] == null || !accept(i, out[i], 'cache', false)) { out[i] = null; need.push(i); }
     });
-    if (!need.length) return out;
+    if (!need.length) { out.engines = engines; return out; }
 
-    const res = await T.translate(need);
-    needIdx.forEach((i, n) => {
-      const t = res.result[n];
-      if (t != null && String(t).trim()) {
-        out[i] = t;
-        T.cachePut(texts[i], lang, t);
-      } else {
-        out[i] = null;
-      }
+    const res = await T.translate(need.map((i) => texts[i]), {
+      onItem: (n, t, eng) => { if (t != null) accept(need[n], t, eng, true); }
     });
+    const bad = [];
+    need.forEach((i, n) => {
+      if (!accept(i, res.result[n], res.engine, true)) bad.push(i);
+    });
+
+    if (bad.length) {
+      try {
+        const r2 = await T.translate(bad.map((i) => texts[i]), { exclude: [res.engine] });
+        bad.forEach((i, n) => {
+          const t = r2.result[n];
+          if (!accept(i, t, r2.engine, true) && t != null && String(t).trim()) {
+            // 兩個引擎都翻不好時，至少給看得到的那一份
+            out[i] = t; engines[i] = r2.engine; done.add(i);
+            if (opts.onItem) { try { opts.onItem(i, t, r2.engine); } catch (e) { /* ignore */ } }
+          }
+        });
+      } catch (e) { /* 沒有其他引擎可用：保留第一個引擎的結果（若有） */ }
+      bad.forEach((i, n) => {
+        if (done.has(i)) return;
+        const t = res.result[need.indexOf(i)];
+        if (t != null && String(t).trim()) {
+          out[i] = t; engines[i] = res.engine; done.add(i);
+          if (opts.onItem) { try { opts.onItem(i, t, res.engine); } catch (e) { /* ignore */ } }
+        }
+      });
+    }
+    out.engines = engines;
     return out;
   };
 
