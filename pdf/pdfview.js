@@ -40,7 +40,7 @@
   PL.setStatus = function (text, ratio) {
     const s = document.querySelector('#pl-bar .pl-status');
     const p = document.querySelector('#pl-bar .pl-prog > i');
-    if (s && text != null) s.textContent = text;
+    if (s && text != null) { s.textContent = text; s.title = text; }
     if (p && typeof ratio === 'number') p.style.width = Math.max(0, Math.min(1, ratio)) * 100 + '%';
   };
 
@@ -661,7 +661,8 @@
     }
   }
 
-  function enqueue(list) {
+  /** manual：使用者自己選的段落 —— 只翻這幾段，不會因此開始自動翻整份 */
+  function enqueue(list, manual) {
     let added = 0;
     for (const i of list) {
       const b = PL.blocks[i];
@@ -671,8 +672,18 @@
       if (Q.queued.has(h.i)) continue;
       Q.queued.add(h.i); Q.queue.push(h.i); added++;
     }
-    if (added) { Q.started = true; pump(); }
+    if (added) { if (!manual) Q.started = true; pump(); }
   }
+
+  /** 翻譯指定的段落（選取文字按「翻譯」時用） */
+  PL.translateBlocks = function (list) {
+    const want = (list || []).filter((i) => PL.blocks[i] && (PL.blocks[i].state === 'pending' || PL.blocks[i].state === 'error'));
+    if (!want.length) return 0;
+    Q.paused = false; Q.failures = 0;
+    want.forEach((i) => { if (PL.blocks[i].state === 'error') setState(PL.blocks[i], 'pending'); });
+    enqueue(want, true);
+    return want.length;
+  };
 
   function translateAll() {
     Q.failures = 0; Q.paused = false; Q.started = true;
@@ -873,14 +884,6 @@
     hoverTimer = setTimeout(() => { if (hoverBtn) hoverBtn.classList.remove('pl-show'); }, 450);
   }
 
-  function peek(b, on) {
-    if (!b) return;
-    for (const x of chainOf(b.head)) {
-      if (x.left) x.left.classList.toggle('pl-peek', on);
-      if (x.right) x.right.classList.toggle('pl-peek', on);
-    }
-  }
-
   function engineName(k) {
     if (k === 'cache') return '快取';
     return ((globalThis.PL_ENGINE_LABEL[k] || k || '').split('（')[0]) || '未知';
@@ -1001,15 +1004,22 @@
   const scheduleOverlay = PL.debounce(() => { if (PL.Overlay) PL.Overlay.reproject(); }, 180);
 
   let lock = 0;
-  function syncFrom(side) {
+  function syncFrom(side, force) {
     if (!PL.settings.syncScroll || PL.mode !== 'both') return;
-    if (Date.now() < lock) return;
+    if (!force && Date.now() < lock) return;
     Sync.ensure();
     if (Sync.lt.length < 1) return;
 
     const L = $('pl-left'), R = $('pl-right');
     const from = side === 'left' ? L : R;
     const to = side === 'left' ? R : L;
+
+    // 放大之後左右也能捲：水平位置按比例同步
+    const fw = from.scrollWidth - from.clientWidth, tw = to.scrollWidth - to.clientWidth;
+    if (tw > 0) {
+      const x = fw > 0 ? from.scrollLeft / fw * tw : 0;
+      if (Math.abs(to.scrollLeft - x) >= 2) { lock = Date.now() + 80; to.scrollLeft = x; }
+    }
     const ft = side === 'left' ? Sync.lt : Sync.rt;
     const tt = side === 'left' ? Sync.rt : Sync.lt;
 
@@ -1119,22 +1129,63 @@
     relayout();
   }
 
+  /* 重新排版（縮放、改欄寬）之後，讓「原本在畫面某一點的那個位置」還留在同一點：
+     用滑鼠滾輪放大時就是游標底下那個字，按按鈕時是畫面中央 */
+  let zoomAnchor = null;
+
+  function anchorInfo(pane, ax, ay) {
+    const side = pane.id === 'pl-left' ? 'elL' : 'elR';
+    const pr = pane.getBoundingClientRect();
+    const cy = pr.top + ay;
+    let best = null, bd = Infinity;
+    for (const p of doc.pages) {
+      const el = p[side];
+      if (!el) continue;
+      const r = el.getBoundingClientRect();
+      const d = cy < r.top ? r.top - cy : (cy > r.bottom ? cy - r.bottom : 0);
+      if (d < bd) { bd = d; best = { p, r }; }
+    }
+    if (!best) return null;
+    return {
+      pane, side, ax, ay, page: best.p,
+      fx: (pr.left + ax - best.r.left) / best.r.width,
+      fy: (cy - best.r.top) / best.r.height
+    };
+  }
+
+  function restoreAnchor(a) {
+    const el = a.page[a.side];
+    if (!el) return;
+    const pr = a.pane.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    a.pane.scrollTop += (r.top + a.fy * r.height) - (pr.top + a.ay);
+    a.pane.scrollLeft += (r.left + a.fx * r.width) - (pr.left + a.ax);
+    syncFrom(a.pane.id === 'pl-left' ? 'left' : 'right', true);
+  }
+
   const relayout = PL.debounce(() => {
     if (!doc.pdf) return;
     const L = $('pl-left');
-    const frac = L.scrollHeight ? L.scrollTop / L.scrollHeight : 0;
+    const a = zoomAnchor || (L.clientWidth ? anchorInfo(L, L.clientWidth / 2, L.clientHeight / 2) : null);
+    zoomAnchor = null;
     layoutPages();
     requestAnimationFrame(() => {
-      L.scrollTop = frac * L.scrollHeight;
+      if (a) restoreAnchor(a);
       updateViewport();
     });
-  }, 220);
+  }, 160);
 
-  function setZoom(z) {
-    doc.zoom = Math.max(0.4, Math.min(3, z));
+  /** anchor = { pane, x, y }（相對於欄的左上角），沒給就以左欄中央為準 */
+  function setZoom(z, anchor) {
+    const nz = Math.max(0.4, Math.min(4, z));
+    if (Math.abs(nz - doc.zoom) < 0.001) return;
+    // 一連串的滾輪事件只在第一下記錄錨點（之後版面還沒重排，記的位置才準）
+    if (anchor && !zoomAnchor) zoomAnchor = anchorInfo(anchor.pane, anchor.x, anchor.y);
+    doc.zoom = nz;
     $('pl-zoom-label').textContent = Math.round(doc.zoom * 100) + '%';
     relayout();
   }
+  PL.setZoom = (z) => setZoom(z);
 
   function wirePanes() {
     const L = $('pl-left'), R = $('pl-right');
@@ -1152,20 +1203,36 @@
       if (hoverBtn) hoverBtn.classList.remove('pl-show');
     }), { passive: true });
 
-    // 游標停在某一段：左右兩邊對應的那一段一起淡淡標出來
-    let peeked = null;
+    // 游標停在譯文上：右上角出現「⋯」段落工具（不再用滑鼠移動時一直跳的紫色框）
     const onOver = (e) => {
       if (PL.Overlay && PL.Overlay.tool) return;
       const el = e.target.closest && e.target.closest('[data-pl-b]');
       const b = el ? PL.blocks[Number(el.getAttribute('data-pl-b'))] : null;
-      if (b !== peeked) { peek(peeked, false); peek(b, true); peeked = b; }
       if (b && b.right && el === b.right && b.state === 'done') showHoverBtn(b);
     };
-    L.addEventListener('mouseover', onOver);
     R.addEventListener('mouseover', onOver);
-    [L, R].forEach((pane) => pane.addEventListener('mouseleave', () => {
-      peek(peeked, false); peeked = null; hideHoverBtnSoon();
-    }));
+    [L, R].forEach((pane) => pane.addEventListener('mouseleave', hideHoverBtnSoon));
+
+    /* Ctrl + 滾輪、觸控板的捏合手勢：放大縮小 PDF 頁面（以游標所在位置為中心），
+       不是放大整個視窗介面 */
+    window.addEventListener('wheel', (e) => {
+      if (!e.ctrlKey || !doc.pdf) return;
+      e.preventDefault();
+      const pane = e.target.closest && e.target.closest('#pl-left, #pl-right');
+      const p = pane || L;
+      const r = p.getBoundingClientRect();
+      const f = Math.min(1.25, Math.max(0.8, Math.exp(-e.deltaY * 0.0025)));
+      setZoom(doc.zoom * f, { pane: p, x: pane ? e.clientX - r.left : r.width / 2, y: pane ? e.clientY - r.top : r.height / 2 });
+    }, { passive: false });
+
+    // Ctrl + = / − / 0：放大、縮小、回到貼齊欄寬
+    window.addEventListener('keydown', (e) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || !doc.pdf) return;
+      if (globalThis.PLDesktop) return;            // 桌面版由選單處理，避免放大兩次
+      if (e.key === '=' || e.key === '+') { e.preventDefault(); setZoom(doc.zoom * 1.2); }
+      else if (e.key === '-' || e.key === '_') { e.preventDefault(); setZoom(doc.zoom / 1.2); }
+      else if (e.key === '0') { e.preventDefault(); setZoom(1); }
+    }, true);
 
     const g = $('pl-gutter');
     let dragging = false;
@@ -1494,6 +1561,10 @@
           else if (msg.command === 'retry') PL.retryFailed();
           else if (msg.command === 'export-pdf') doExport();
           else if (msg.command === 'gemini-key') PL.openGeminiDialog();
+          else if (msg.command === 'translate-selection') PL.translateSelection();
+          else if (msg.command === 'zoom-in') setZoom(doc.zoom * 1.2);
+          else if (msg.command === 'zoom-out') setZoom(doc.zoom / 1.2);
+          else if (msg.command === 'zoom-reset') setZoom(1);
           return { ok: true };
         case 'pl.settings':
           PL.settings = Object.assign({}, PL.settings, msg.patch || {});

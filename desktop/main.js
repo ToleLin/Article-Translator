@@ -310,9 +310,14 @@ function buildMenu() {
       submenu: [
         { label: '註解側欄', accelerator: 'CmdOrCtrl+B', click: (m, w) => send(w, { type: 'pl.command', command: 'sidebar' }) },
         { type: 'separator' },
-        { role: 'zoomIn', label: '放大介面' },
-        { role: 'zoomOut', label: '縮小介面' },
-        { role: 'resetZoom', label: '介面實際大小' },
+        // Ctrl+= / Ctrl+- / Ctrl+0 放大縮小的是「PDF 頁面」（Ctrl+滾輪也可以）；介面字太小再用下面那三個
+        { label: '放大頁面', accelerator: 'CmdOrCtrl+=', click: (m, w) => send(w, { type: 'pl.command', command: 'zoom-in' }) },
+        { label: '縮小頁面', accelerator: 'CmdOrCtrl+-', click: (m, w) => send(w, { type: 'pl.command', command: 'zoom-out' }) },
+        { label: '頁面貼齊欄寬', accelerator: 'CmdOrCtrl+0', click: (m, w) => send(w, { type: 'pl.command', command: 'zoom-reset' }) },
+        { type: 'separator' },
+        { role: 'zoomIn', label: '放大介面文字', accelerator: 'CmdOrCtrl+Shift+=' },
+        { role: 'zoomOut', label: '縮小介面文字', accelerator: 'CmdOrCtrl+Shift+-' },
+        { role: 'resetZoom', label: '介面文字實際大小', accelerator: 'CmdOrCtrl+Shift+0' },
         { role: 'togglefullscreen', label: '全螢幕' },
         { type: 'separator' },
         { role: 'reload', label: '重新載入' },

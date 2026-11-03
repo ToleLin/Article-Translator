@@ -286,6 +286,11 @@ chrome.runtime.onInstalled.addListener(() => {
       contexts: ['page', 'selection']
     });
     chrome.contextMenus.create({
+      id: 'pl-translate',
+      title: 'PaperLens：翻譯選取的文字',
+      contexts: ['selection']
+    });
+    chrome.contextMenus.create({
       id: 'pl-highlight',
       title: 'PaperLens：螢光標記這段',
       contexts: ['selection']
@@ -308,6 +313,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab) return;
   try {
     if (info.menuItemId === 'pl-toggle') await handlers['toggle']({ tabId: tab.id });
+    if (info.menuItemId === 'pl-translate') await handlers['command']({ tabId: tab.id, command: 'translate-selection' });
     if (info.menuItemId === 'pl-highlight') await handlers['command']({ tabId: tab.id, command: 'highlight-selection' });
     if (info.menuItemId === 'pl-explain') await handlers['command']({ tabId: tab.id, command: 'explain-selection' });
     if (info.menuItemId === 'pl-pdf') {

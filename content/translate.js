@@ -262,6 +262,14 @@
     PL.setStatus(msg, done / total);
   }
 
+  /** 翻譯指定的段落（選取文字按「翻譯」時用） */
+  PL.translateBlocks = function (list) {
+    const want = (list || []).filter((i) => PL.blocks[i] && (PL.blocks[i].state === 'pending' || PL.blocks[i].state === 'error'));
+    want.forEach((i) => { if (PL.blocks[i].state === 'error') PL.blocks[i].state = 'pending'; });
+    if (want.length) enqueue(want);
+    return want.length;
+  };
+
   PL.retryFailed = function () {
     const bad = PL.blocks.filter((b) => b.state === 'error').map((b) => b.i);
     if (!bad.length) { PL.toast('沒有失敗的段落'); return; }

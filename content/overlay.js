@@ -574,6 +574,8 @@
       const s = state.sides[side];
       const h = Math.max(s.pane.scrollHeight, s.pane.clientHeight);
       s.layer.style.height = h + 'px';
+      // 放大之後頁面比欄寬還寬，圖層也要跟著變寬，捲到右邊才畫得到
+      s.layer.style.width = Math.max(s.pane.scrollWidth, s.pane.clientWidth) + 'px';
       s.svg.textContent = '';
       alive.set(side, new Set());
     }

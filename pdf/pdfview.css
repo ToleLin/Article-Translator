@@ -104,9 +104,9 @@ html { --pl-page-bg: var(--pl-panel); }
   outline-offset: 1px;
 }
 
-/* 游標停在某一段：左右對應的那一段一起淡淡標出來 */
-.pl-tr.pl-peek[data-pl-done] { box-shadow: 0 0 0 1.5px rgba(79, 70, 229, .45); }
-.pdf-textlayer .pl-para.pl-peek span { background: rgba(79, 70, 229, .10); }
+/* 放大之後頁面比欄寬還寬：左右也要能捲動（共用樣式預設是 overflow-x: hidden） */
+html.pl-active #pl-left.pl-pane,
+html.pl-active #pl-right.pl-pane { overflow-x: auto !important; }
 
 /* 段落工具按鈕 */
 #pl-blockbtn {
@@ -171,8 +171,13 @@ html { --pl-page-bg: var(--pl-panel); }
 #pl-bar #pl-zoom-label { min-width: 40px; text-align: center; font-size: 12px; color: var(--pl-muted); }
 #pl-bar .pl-pageno { font-size: 12px; color: var(--pl-muted); white-space: nowrap; }
 
+/* 工具列變窄時先收掉次要的東西；縮放按鈕一直留著 */
+#pl-bar { overflow-x: auto; scrollbar-width: none; }
+#pl-bar::-webkit-scrollbar { display: none; }
+#pl-bar .pl-status { max-width: 24vw; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1500px) { #pl-bar .pl-brand { display: none; } }
+@media (max-width: 1380px) { #pl-bar .pl-prog { display: none; } }
 @media (max-width: 1240px) { #pl-bar .pl-pageno { display: none; } }
-@media (max-width: 1080px) { #pl-bar .pl-zoom { display: none; } }
 
 /* ══════════ 開檔畫面 ══════════ */
 

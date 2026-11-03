@@ -192,6 +192,14 @@
     const end = charIndex(block, r.endContainer, r.endOffset);
     const full = block.textContent;
 
+    // 選取範圍跨過的所有段落（「翻譯」要用整段選取，不只起始那一段）
+    const blocks = [];
+    if (pane) {
+      pane.querySelectorAll('[data-pl-b]').forEach((el) => {
+        if (range.intersectsNode(el)) blocks.push(Number(el.getAttribute('data-pl-b')));
+      });
+    }
+
     return {
       side,
       block: Number(block.getAttribute('data-pl-b')),
@@ -199,10 +207,45 @@
       exact: full.slice(start, end),
       prefix: full.slice(Math.max(0, start - 24), start),
       suffix: full.slice(end, end + 24),
-      rect: r.getBoundingClientRect(),
+      rect: range.getBoundingClientRect(),
       range: r,
+      full: range,
+      fullText: selectionText(range),
+      blocks,
       text
     };
+  }
+
+  /**
+   * 選取範圍的文字。PDF 的文字層是一個個絕對定位的小片段，直接 toString() 會把
+   * 行尾和下一行開頭黏成一個字（diffractivewaveguide）；這裡依片段位置補空白、接回斷字。
+   */
+  function selectionText(range) {
+    if (!PL.isPdf) return range.toString().replace(/\s+/g, ' ').trim();
+    const root = range.commonAncestorContainer.nodeType === 1
+      ? range.commonAncestorContainer : range.commonAncestorContainer.parentNode;
+    const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, null);
+    const L = globalThis.PLLayout;
+    const vocab = PL.pdf && PL.pdf.doc && PL.pdf.doc.layout ? PL.pdf.doc.layout.vocab : null;
+    let out = '', prev = null, n;
+    while ((n = walker.nextNode())) {
+      if (!range.intersectsNode(n)) continue;
+      const host = n.parentElement && n.parentElement.closest('span');
+      if (!host || host.closest('[data-pl-ui]')) continue;
+      const s = n === range.startContainer ? range.startOffset : 0;
+      const e = n === range.endContainer ? range.endOffset : n.nodeValue.length;
+      const t = n.nodeValue.slice(s, e);
+      if (!t.trim()) continue;
+      const r = host.getBoundingClientRect();
+      if (!out) out = t;
+      else if (prev && Math.abs(r.top - prev.top) > Math.max(3, prev.height * 0.5)) {
+        out = L ? L.joinPieces(out.replace(/\s+$/, ''), t.replace(/^\s+/, ''), vocab) : out + ' ' + t;   // 換行
+      } else if (prev && host !== prev.host && r.left - prev.right > 1.5 && !/\s$/.test(out) && !/^\s/.test(t)) {
+        out += ' ' + t;
+      } else out += t;
+      prev = { top: r.top, height: r.height, right: r.right, host };
+    }
+    return out.replace(/\s+/g, ' ').trim();
   }
 
   function createAnnotation(info, color) {
@@ -280,6 +323,17 @@
 
     bar.appendChild(PL.el('span', { class: 'pl-div' }));
 
+    // 翻譯選取的文字：小視窗顯示譯文，同時把這幾段在右欄就地翻好
+    const bTr = PL.el('button', { class: 'pl-sel-tr', text: '🌐 翻譯', title: '翻譯選取的文字（右欄的這幾段也會一起翻好）' });
+    bTr.addEventListener('mousedown', (e) => e.preventDefault());
+    bTr.addEventListener('click', () => {
+      if (!pendingRange) return;
+      const info = pendingRange;
+      hideSelBar();
+      quickTranslate(info);
+    });
+    bar.appendChild(bTr);
+
     const bNote = PL.el('button', { text: '✎ 心得' });
     bNote.addEventListener('mousedown', (e) => e.preventDefault());
     bNote.addEventListener('click', () => {
@@ -320,6 +374,9 @@
 
   function showSelBar(info) {
     const bar = selBar();
+    // 選的是右欄（已經是譯文）就不用再翻
+    const tr = bar.querySelector('.pl-sel-tr');
+    if (tr) tr.style.display = info.side === 'right' ? 'none' : '';
     bar.classList.add('pl-show');
     const r = info.rect;
     const w = bar.offsetWidth || 260;
@@ -456,6 +513,259 @@
     }
   }
   PL.runExplain = runExplain;
+
+  /* ══════════ 選取時，另一邊對應的句子一起標出來 ══════════
+     用 CSS Custom Highlight（不改動任何 DOM），選了英文就亮出對應的中文句子，反過來也一樣。
+     對應方式：先切句，兩邊句數一樣就一句對一句；對不上就按位置比例，再擴到整句。 */
+
+  const CAN_SYNC = typeof CSS !== 'undefined' && CSS.highlights && typeof Highlight !== 'undefined';
+
+  function nonWsBefore(str, pos) {
+    let k = 0;
+    for (let i = 0; i < pos && i < str.length; i++) if (!/\s/.test(str[i])) k++;
+    return k;
+  }
+  function posOfNonWs(str, k) {
+    let n = 0;
+    for (let i = 0; i < str.length; i++) {
+      if (/\s/.test(str[i])) continue;
+      if (n === k) return i;
+      n++;
+    }
+    return str.length;
+  }
+
+  const EN_ABBR = /(?:\b(?:e\.g|i\.e|et al|etc|vs|cf|Fig|Figs|Eq|Eqs|Ref|Refs|Sec|Tab|No|Vol|approx|ca|resp|Dr|Prof|Suppl)|\b[A-Z])\.$/;
+
+  function sentenceSpans(text, cjk) {
+    const spans = [];
+    const re = cjk ? /[。！？；!?]+[」』”’）)\]]*/g : /[.!?;]+["”’)\]]*(?=\s)/g;
+    let last = 0, m;
+    while ((m = re.exec(text))) {
+      const end = m.index + m[0].length;
+      if (!cjk && EN_ABBR.test(text.slice(Math.max(0, m.index - 12), m.index + 1))) continue;
+      if (text.slice(last, end).trim()) spans.push([last, end]);
+      last = end;
+    }
+    if (text.slice(last).trim()) spans.push([last, text.length]);
+    return spans.length ? spans : [[0, text.length]];
+  }
+
+  function spanIdx(spans, s, e) {
+    let i0 = -1, i1 = -1;
+    spans.forEach(([a, b], k) => {
+      if (b > s && a < Math.max(e, s + 1)) { if (i0 < 0) i0 = k; i1 = k; }
+    });
+    if (i0 < 0) i0 = i1 = spans.length - 1;
+    return [i0, i1];
+  }
+
+  function mapRange(src, s, e, srcCjk, tgt, tgtCjk) {
+    const A = sentenceSpans(src, srcCjk), B = sentenceSpans(tgt, tgtCjk);
+    const [i0, i1] = spanIdx(A, s, e);
+    let r;
+    if (A.length === B.length) r = [B[i0][0], B[i1][1]];
+    else {
+      const L1 = src.length || 1;
+      const [j0, j1] = spanIdx(B, Math.floor(s / L1 * tgt.length), Math.ceil(e / L1 * tgt.length));
+      r = [B[j0][0], B[j1][1]];
+    }
+    while (r[0] < r[1] && /\s/.test(tgt[r[0]])) r[0]++;
+    return r;
+  }
+
+  /** 一個段落裡選了 [s, e)（selected 那一邊的文字位置）→ 另一邊對應的 Range */
+  function counterpart(b, side, s, e) {
+    if (!b || !b.left || !b.right || b.state !== 'done') return null;
+    const tgtCjk = /^(zh|ja|ko)/i.test((PL.settings && PL.settings.targetLang) || 'zh');
+    const leftTxt = b.left.textContent, rightTxt = b.right.textContent;
+    if (!leftTxt.trim() || !rightTxt.trim()) return null;
+    // PDF 左欄文字層的字串沒有行與行之間的空白：句子要在整理過的原文（srcText）上切，再按「非空白字元」對回去
+    const src = PL.isPdf ? b.srcText : leftTxt;
+    // 起點對到「第一個被選到的字」，終點對到「最後一個被選到的字的後面」（不然會多亮下一句）
+    const toSrc = (p) => (PL.isPdf ? posOfNonWs(src, nonWsBefore(leftTxt, p)) : p);
+    const toSrcEnd = (p) => (PL.isPdf ? posOfNonWs(src, Math.max(0, nonWsBefore(leftTxt, p) - 1)) + 1 : p);
+    const toLeft = (p) => (PL.isPdf ? posOfNonWs(leftTxt, nonWsBefore(src, p)) : p);
+    const toLeftEnd = (p) => (PL.isPdf ? posOfNonWs(leftTxt, Math.max(0, nonWsBefore(src, p) - 1)) + 1 : p);
+    let a, z, el;
+    if (side === 'left') {
+      const ss = toSrc(s);
+      [a, z] = mapRange(src, ss, Math.max(ss + 1, toSrcEnd(e)), false, rightTxt, tgtCjk);
+      el = b.right;
+    } else {
+      const [ss, se] = mapRange(rightTxt, s, e, tgtCjk, src, false);
+      a = toLeft(ss); z = Math.max(a + 1, toLeftEnd(se));
+      el = b.left;
+    }
+    return z > a ? rangeFromOffsets(el, a, Math.min(z, el.textContent.length)) : null;
+  }
+
+  function clearSync() {
+    if (CAN_SYNC) CSS.highlights.delete('pl-sync');
+  }
+
+  function syncSelection(info) {
+    if (!CAN_SYNC || !info || !info.full) return;
+    const range = info.full;
+    const ranges = [];
+    for (const i of (info.blocks && info.blocks.length ? info.blocks : [info.block])) {
+      const b = PL.blocks[i];
+      const el = b && (info.side === 'left' ? b.left : b.right);
+      if (!el) continue;
+      const s = el.contains(range.startContainer) ? charIndex(el, range.startContainer, range.startOffset) : 0;
+      const e = el.contains(range.endContainer) ? charIndex(el, range.endContainer, range.endOffset) : el.textContent.length;
+      if (e <= s) continue;
+      const r = counterpart(b, info.side, s, e);
+      if (r) ranges.push(r);
+    }
+    if (!ranges.length) { clearSync(); return; }
+    CSS.highlights.set('pl-sync', new Highlight(...ranges));
+
+    // 對應的句子不在畫面上（例如關掉了同步捲動）：把另一欄捲過去
+    const pane = info.side === 'left' ? PL.els.right : PL.els.left;
+    const rr = ranges[0].getBoundingClientRect();
+    if (pane && rr.height) {
+      const pr = pane.getBoundingClientRect();
+      if (rr.bottom < pr.top + 10 || rr.top > pr.bottom - 10) {
+        pane.scrollBy({ top: rr.top - pr.top - pane.clientHeight / 3, behavior: 'smooth' });
+      }
+    }
+  }
+
+  /* ══════════ 翻譯選取的文字 ══════════ */
+
+  let qt = null, qtState = null;
+
+  function engineLabel(k) {
+    if (k === 'cache') return '快取';
+    if (k === 'same') return '不需翻譯';
+    return ((globalThis.PL_ENGINE_LABEL && globalThis.PL_ENGINE_LABEL[k]) || k || '').split('（')[0];
+  }
+
+  function qtPopup() {
+    if (qt) return qt;
+    qt = PL.el('div', { id: 'pl-qt', 'data-pl-ui': '1' });
+    qt.innerHTML = ''
+      + '<header><b>🌐 翻譯選取的文字</b><span class="pl-spacer"></span>'
+      + '<button class="pl-x" data-act="close" title="關閉（Esc）">✕</button></header>'
+      + '<div class="pl-qt-src"></div>'
+      + '<div class="pl-qt-out"></div>'
+      + '<div class="pl-qt-meta"></div>'
+      + '<div class="pl-row">'
+      + '<button data-act="copy">⧉ 複製譯文</button>'
+      + '<button data-act="note">✎ 存成心得</button>'
+      + '<select class="pl-qt-eng" title="換一個引擎再翻一次"></select>'
+      + '</div>';
+    document.documentElement.appendChild(qt);
+
+    qt.addEventListener('mousedown', (e) => e.stopPropagation());
+    qt.addEventListener('click', async (e) => {
+      const a = e.target.closest && e.target.closest('[data-act]');
+      if (!a || !qtState) return;
+      const act = a.getAttribute('data-act');
+      if (act === 'close') closeQt();
+      else if (act === 'copy') {
+        try { await navigator.clipboard.writeText(qtState.out || ''); PL.toast('已複製譯文'); }
+        catch (err) { PL.toast('複製失敗'); }
+      } else if (act === 'note') {
+        if (!qtState.out) return;
+        try {
+          const ann = createAnnotation(qtState.info, PL.settings.defaultHighlight);
+          updateAnnotation(ann, { note: '【譯文】' + qtState.out });
+          PL.toast('已標記並把譯文存成心得');
+          closeQt();
+        } catch (err) {
+          PL.toast('這段選取已經變動，請重新選取後再存');
+        }
+      }
+    });
+    qt.querySelector('.pl-qt-eng').addEventListener('change', (e) => {
+      const eng = e.target.value;
+      e.target.value = '';
+      if (eng && qtState) runQt(eng);
+    });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeQt(); }, true);
+    document.addEventListener('mousedown', (e) => {
+      if (qt.classList.contains('pl-show') && !qt.contains(e.target)) closeQt();
+    }, true);
+    return qt;
+  }
+
+  function closeQt() { if (qt) qt.classList.remove('pl-show'); qtState = null; }
+
+  async function runQt(engine) {
+    const st = qtState;
+    const out = qt.querySelector('.pl-qt-out'), meta = qt.querySelector('.pl-qt-meta');
+    out.textContent = '翻譯中…';
+    out.classList.add('pl-wait');
+    meta.textContent = '';
+    st.out = '';
+    const T = globalThis.PLTranslate;
+    const t0 = performance.now();
+    try {
+      await T.ensureSourceLang(st.src);
+      let t, eng;
+      if (engine) {
+        t = (await T.translateWith(engine, [st.src]))[0];
+        eng = engine;
+      } else {
+        const r = await T.translateCached([st.src]);
+        t = r[0];
+        eng = r.engines ? r.engines[0] : T.lastEngine;
+      }
+      if (qtState !== st) return;           // 已經關掉或換了別段
+      if (t == null || !String(t).trim()) throw new Error('翻譯引擎沒有回傳結果，可以從下面換一個引擎再試');
+      st.out = String(t);
+      out.textContent = st.out;
+      meta.textContent = engineLabel(eng) + ' · ' + Math.round(performance.now() - t0) + ' ms';
+    } catch (e) {
+      if (qtState !== st) return;
+      out.textContent = '⚠ ' + (e.message || e);
+    }
+    out.classList.remove('pl-wait');
+  }
+
+  /** info 來自 describeSelection()；沒有段落的一般網頁選取也可以（只有 text） */
+  function quickTranslate(info) {
+    const src = (info.fullText || info.text || '').trim();
+    if (!src) { PL.toast('請先選取要翻譯的文字'); return; }
+    const p = qtPopup();
+    qtState = { info, src, out: '' };
+    p.querySelector('.pl-qt-src').textContent = src.length > 600 ? src.slice(0, 600) + '…' : src;
+    p.querySelector('[data-act="note"]').style.display = info.range ? '' : 'none';
+
+    const sel = p.querySelector('.pl-qt-eng');
+    sel.textContent = '';
+    sel.appendChild(PL.el('option', { value: '', text: '換引擎再翻…' }));
+    const engines = globalThis.PLDesktop ? ['google', 'edge', 'gemini'] : ['chrome', 'edge', 'google', 'gemini'];
+    engines.filter((e) => e !== 'gemini' || (PL.settings && PL.settings.geminiApiKey))
+      .forEach((e) => sel.appendChild(PL.el('option', { value: e, text: engineLabel(e) })));
+
+    p.classList.add('pl-show');
+    const r = info.rect || { left: window.innerWidth / 2 - 200, bottom: 120, top: 120 };
+    const w = Math.min(460, window.innerWidth - 20);
+    p.style.width = w + 'px';
+    p.style.left = Math.max(10, Math.min(window.innerWidth - w - 10, r.left)) + 'px';
+    const h = p.offsetHeight || 220;
+    let y = r.bottom + 10;
+    if (y + h > window.innerHeight - 10) y = Math.max(50, r.top - h - 10);
+    p.style.top = y + 'px';
+
+    runQt(null);
+    // 選到的這幾段在右欄也一起翻好（例如關掉了「自動翻譯」、只想翻自己選的段落時）
+    if (info.blocks && info.blocks.length && PL.translateBlocks) PL.translateBlocks(info.blocks);
+  }
+
+  /** 快捷鍵／右鍵選單用：翻譯目前選取的文字 */
+  PL.translateSelection = function () {
+    const info = describeSelection();
+    if (info) { hideSelBar(); quickTranslate(info); return; }
+    const sel = document.getSelection();
+    const text = sel ? sel.toString().replace(/\s+/g, ' ').trim() : '';
+    if (!text) { PL.toast('請先選取要翻譯的文字'); return; }
+    const rect = sel.rangeCount ? sel.getRangeAt(0).getBoundingClientRect() : null;
+    quickTranslate({ text, rect });
+  };
 
   /* ══════════ 側欄 ══════════ */
 
@@ -604,9 +914,10 @@
       if (e.target.closest && e.target.closest('[data-pl-ui]')) return;
       setTimeout(() => {
         const info = describeSelection();
-        if (!info) { hideSelBar(); return; }
+        if (!info) { hideSelBar(); clearSync(); return; }
         pendingRange = info;
         showSelBar(info);
+        syncSelection(info);
       }, 10);
     }, true);
 
@@ -615,6 +926,7 @@
       const t = e.target;
       if (t.closest && t.closest('#pl-sel')) return;
       hideSelBar();
+      if (!(t.closest && t.closest('[data-pl-ui]'))) clearSync();
       if (t.closest && (t.closest('#pl-pop') || t.closest('#pl-side'))) return;
 
       const mk = t.closest && t.closest('mark.pl-hl');

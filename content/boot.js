@@ -82,6 +82,9 @@
           } else if (msg.command === 'explain-selection') {
             if (!PL.active) await PL.activate();
             PL.highlightSelection(true);
+          } else if (msg.command === 'translate-selection') {
+            // 沒開對照也可以：直接用小視窗翻譯網頁上選取的文字
+            PL.translateSelection();
           } else if (msg.command === 'export-pdf') {
             await PL.openExport();
           } else if (msg.command === 'translate-all') {
