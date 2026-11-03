@@ -21,11 +21,37 @@
     .row button { margin-bottom: 7px; }
     #state { font-size: 11.5px; color: var(--muted); min-height: 16px; margin-top: 4px; }
     hr { border: 0; border-top: 1px solid var(--line); margin: 10px 0; }
+    #upd { display: none; margin: 0 0 12px; padding: 10px 11px; border-radius: 10px;
+           background: #fef2f2; border: 1px solid #fecaca; color: #7f1d1d; font-size: 12px; }
+    @media (prefers-color-scheme: dark) { #upd { background: #3b1212; border-color: #7f1d1d; color: #fecaca; } }
+    #upd.on { display: block; }
+    #upd b { font-size: 13px; }
+    #upd ul { margin: 6px 0 8px; padding-left: 17px; }
+    #upd li { margin: 1px 0; }
+    #upd ol { margin: 6px 0 8px; padding-left: 17px; color: inherit; }
+    #upd button { margin: 0 0 6px; padding: 7px 9px; text-align: center; }
+    #upd button.go { background: #dc2626; border-color: #dc2626; color: #fff; font-weight: 600; }
+    .foot { display: flex; justify-content: space-between; align-items: center; margin-top: 4px;
+            font-size: 11.5px; color: var(--muted); }
+    .foot a { color: var(--muted); cursor: pointer; text-decoration: underline; }
+    .foot a:hover { color: var(--accent); }
   </style>
 </head>
 <body>
   <h1>PaperLens</h1>
   <div class="sub">文獻對照閱讀 · 註解 · 雙欄 PDF</div>
+
+  <div id="upd">
+    <b id="upd-title">有新版本</b>
+    <ul id="upd-list"></ul>
+    <ol>
+      <li>下載更新包（zip）並解壓縮</li>
+      <li>把裡面的檔案全部複製，貼到原本的 PaperLens 資料夾、選「取代」</li>
+      <li>到擴充功能頁按 PaperLens 的「重新載入」</li>
+    </ol>
+    <button id="upd-dl" class="go">① 下載更新包</button>
+    <button id="upd-ext">③ 開啟擴充功能頁</button>
+  </div>
 
   <button id="toggle" class="primary">開啟／關閉對照閱讀 <span class="kbd">Alt+Shift+T</span></button>
   <button id="all">翻譯全文</button>
@@ -38,6 +64,7 @@
   <hr>
   <button id="options">設定…</button>
   <div id="state"></div>
+  <div class="foot"><span id="ver"></span><a id="upd-check">檢查更新</a></div>
 
   <script src="popup.js"></script>
 </body>

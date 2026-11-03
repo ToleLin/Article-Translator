@@ -10,8 +10,8 @@
   if (!B) return;
 
   const listeners = [];
-  let version = '0.0.0';
-  B.version().then((v) => { version = v; }).catch(() => {});
+  let version = B.appVersion || '0.0.0';
+  if (!B.appVersion) B.version().then((v) => { version = v; }).catch(() => {});
 
   const dispatch = (msg) => {
     for (const fn of listeners.slice()) {

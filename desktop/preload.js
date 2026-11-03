@@ -10,6 +10,7 @@ contextBridge.exposeInMainWorld('PLDesktopBridge', {
   storage: (op, arg) => ipcRenderer.invoke('pl:storage', op, arg),
   broadcast: (msg) => ipcRenderer.invoke('pl:broadcast', msg),
   version: () => ipcRenderer.invoke('pl:version'),
+  appVersion: (() => { try { return ipcRenderer.sendSync('pl:version-sync'); } catch (e) { return '0.0.0'; } })(),
   viewerReady: () => ipcRenderer.invoke('pl:viewer-ready'),
   docOpened: () => ipcRenderer.send('pl:doc-opened'),
   openDialog: () => ipcRenderer.invoke('pl:open-dialog'),

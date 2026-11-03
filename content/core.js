@@ -10,7 +10,9 @@
     sourceLang: null,
     blocks: [],            // { i, left, right, srcText, atoms, state }
     els: {},               // 各種 UI 元素
-    version: '0.2.0'
+    get version() {        // 版本號只寫在 manifest.json（node tools/version.js 會一起改）
+      try { return chrome.runtime.getManifest().version; } catch (e) { return ''; }
+    }
   };
 
   /* ══════════ 小工具 ══════════ */

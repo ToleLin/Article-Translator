@@ -1,7 +1,7 @@
 {
   "name": "paperlens-desktop",
   "productName": "PaperLens",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "PaperLens 文獻對照閱讀器 — 桌面版（左原文、右繁中，PDF 版面原樣保留）",
   "author": "PaperLens",
   "repository": "https://github.com/ToleLin/Article-Translator",
@@ -24,6 +24,7 @@
     "files": [
       "main.js",
       "preload.js",
+      "updater.js",
       "package.json",
       "app/**/*"
     ],
@@ -31,11 +32,29 @@
       "output": "dist",
       "buildResources": "build"
     },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ToleLin",
+        "repo": "Article-Translator",
+        "releaseType": "release"
+      }
+    ],
     "win": {
       "icon": "build/icon.png",
       "target": [
-        { "target": "nsis", "arch": ["x64"] },
-        { "target": "portable", "arch": ["x64"] }
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
       ]
     },
     "nsis": {
@@ -51,11 +70,21 @@
       "artifactName": "PaperLens-Portable-${version}.exe"
     },
     "fileAssociations": [
-      { "ext": "pdf", "name": "PDF", "description": "PDF 文件", "role": "Viewer" }
+      {
+        "ext": "pdf",
+        "name": "PDF",
+        "description": "PDF 文件",
+        "role": "Viewer"
+      }
     ],
     "linux": {
-      "target": ["dir"],
+      "target": [
+        "dir"
+      ],
       "icon": "build/icon.png"
     }
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11"
   }
 }

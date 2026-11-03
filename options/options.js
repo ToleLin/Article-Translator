@@ -244,9 +244,44 @@
 
   /* ══════════ 啟動 ══════════ */
 
+  /* 檢查新版本（擴充功能：GitHub Releases；桌面版：主程序的更新器） */
+  function setupUpdateCheck() {
+    const link = $('upd-check'), msg = $('upd-msg');
+    const desktop = !!globalThis.PLDesktop;
+    const show = (u, asked) => {
+      msg.textContent = '';
+      if (!u) return;
+      if (u.newer) {
+        const a = document.createElement('a');
+        a.href = (!desktop && u.assets && u.assets.extension) || u.url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = '有新版本 v' + u.latest + (desktop ? '' : '，下載更新包');
+        msg.append('→ ', a);
+        if (!desktop) msg.append('（解壓縮後覆蓋原本的資料夾，再到擴充功能頁按「重新載入」）');
+      } else if (asked) {
+        msg.textContent = u.error && !u.latest ? '⚠ ' + u.error : '已是最新版';
+      }
+    };
+    link.addEventListener('click', async (e) => {
+      e.preventDefault();
+      msg.textContent = '檢查中…';
+      try {
+        const res = await chrome.runtime.sendMessage({ type: 'update.check', force: true });
+        if (!res || !res.ok) throw new Error((res && res.error) || '沒有回應');
+        // 桌面版的結果會另外跳對話框，這裡只補一行字
+        show(res.data, !desktop);
+      } catch (err) {
+        msg.textContent = '⚠ ' + (err.message || err);
+      }
+    });
+    chrome.runtime.sendMessage({ type: 'update.check' }).then((res) => show(res && res.ok && res.data, false), () => {});
+  }
+
   (async function main() {
     settings = await globalThis.PL_loadSettings();
     $('ver').textContent = 'v' + chrome.runtime.getManifest().version;
+    setupUpdateCheck();
 
     bindSelect('targetLang');
     bindSelect('sourceLang');

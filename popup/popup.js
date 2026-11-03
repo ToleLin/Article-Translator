@@ -32,6 +32,41 @@
   $('pdf').addEventListener('click', () => run(() => send({ type: 'command', command: 'export-pdf' }), true));
   $('options').addEventListener('click', () => run(() => send({ type: 'openOptions' }), true));
 
+  /* 新版本提醒 */
+  $('ver').textContent = 'v' + chrome.runtime.getManifest().version;
+
+  function showUpdate(u) {
+    const box = $('upd');
+    if (!u || !u.newer) { box.classList.remove('on'); return; }
+    $('upd-title').textContent = '有新版本 v' + u.latest + '（目前 v' + u.current + '）';
+    const ul = $('upd-list');
+    ul.textContent = '';
+    for (const t of (u.highlights || []).slice(0, 4)) {
+      const li = document.createElement('li');
+      li.textContent = t;
+      ul.appendChild(li);
+    }
+    ul.style.display = ul.children.length ? '' : 'none';
+    $('upd-dl').onclick = () => chrome.tabs.create({ url: (u.assets && u.assets.extension) || u.url });
+    box.classList.add('on');
+  }
+
+  $('upd-ext').addEventListener('click', () => run(() => send({ type: 'update.openExtensions' }), true));
+  $('upd-check').addEventListener('click', async () => {
+    const a = $('upd-check');
+    a.textContent = '檢查中…';
+    try {
+      const u = await send({ type: 'update.check', force: true });
+      showUpdate(u);
+      a.textContent = u.newer ? '有新版本' : u.error && !u.latest ? '無法檢查' : '已是最新版';
+      if (u.error && !u.latest) say('⚠ ' + u.error);
+    } catch (e) {
+      a.textContent = '無法檢查';
+      say('⚠ ' + (e.message || e));
+    }
+  });
+  send({ type: 'update.check' }).then(showUpdate, () => {});
+
   /* 顯示目前分頁狀態 */
   (async () => {
     try {

@@ -4,6 +4,7 @@
 import './shared/defaults.js';
 import './shared/localai.js';
 import './shared/remote-engines.js';
+import './shared/update.js';
 
 const CONTENT_JS = [
   'shared/defaults.js',
@@ -248,8 +249,77 @@ const handlers = {
   async 'openOptions'() {
     await chrome.runtime.openOptionsPage();
     return true;
+  },
+
+  async 'update.check'(msg) {
+    return checkUpdate(!!(msg && msg.force));
+  },
+
+  async 'update.openExtensions'() {
+    await chrome.tabs.create({ url: 'chrome://extensions/?id=' + chrome.runtime.id });
+    return true;
   }
 };
+
+/* ════════════════════════════════════════════════════════════
+   新版本提醒：每 12 小時問一次 GitHub Releases，有新版就在工具列圖示上標「新」
+   （擴充功能是「載入未封裝項目」裝的，Chrome 不會自己更新，只能提醒使用者下載更新包）
+   ════════════════════════════════════════════════════════════ */
+
+const UPDATE_EVERY = 12 * 3600 * 1000;
+
+function updateState(info) {
+  const cur = chrome.runtime.getManifest().version;
+  return Object.assign({}, info, {
+    current: cur,
+    newer: !!(info && info.latest) && PLUpdate.compare(info.latest, cur) > 0
+  });
+}
+
+async function showUpdateBadge(state) {
+  try {
+    await chrome.action.setBadgeText({ text: state.newer ? '新' : '' });
+    if (state.newer) {
+      await chrome.action.setBadgeBackgroundColor({ color: '#dc2626' });
+      await chrome.action.setTitle({ title: 'PaperLens 有新版本 v' + state.latest + '（目前 v' + state.current + '）' });
+    } else {
+      await chrome.action.setTitle({ title: 'PaperLens 對照閱讀 (Alt+Shift+T)' });
+    }
+  } catch (e) { /* ignore */ }
+}
+
+let updateRun = null;
+async function checkUpdate(force) {
+  if (updateRun) return updateRun;
+  updateRun = (async () => {
+    const { updateInfo } = await chrome.storage.local.get('updateInfo');
+    const old = updateInfo || null;
+    if (!force && old && Date.now() - old.checkedAt < UPDATE_EVERY) {
+      const st = updateState(old);
+      await showUpdateBadge(st);
+      return st;
+    }
+    let info;
+    try {
+      const r = await PLUpdate.latest();
+      info = {
+        checkedAt: Date.now(), latest: r.version, url: r.url,
+        highlights: PLUpdate.highlights(r.notes, 5), assets: r.assets, error: null
+      };
+    } catch (e) {
+      // 查不到（離線、專案是私人的…）就沿用上次的結果，只記下錯誤
+      info = Object.assign({}, old || {}, { checkedAt: Date.now(), error: String(e.message || e) });
+    }
+    await chrome.storage.local.set({ updateInfo: info });
+    const st = updateState(info);
+    await showUpdateBadge(st);
+    return st;
+  })().finally(() => { updateRun = null; });
+  return updateRun;
+}
+
+// 背景程式每次被叫醒都看一下（沒到時間只讀儲存的結果、不會連網）
+checkUpdate(false).catch(() => {});
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const fn = handlers[msg && msg.type];

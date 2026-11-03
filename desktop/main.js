@@ -29,7 +29,9 @@ protocol.registerSchemesAsPrivileged([{
 
 require(path.join(APP_DIR, 'shared', 'defaults.js'));
 require(path.join(APP_DIR, 'shared', 'remote-engines.js'));
+require(path.join(APP_DIR, 'shared', 'update.js'));
 const PLRemote = globalThis.PLRemote;
+const updater = require('./updater');
 
 /* ══════════ 儲存：一個 JSON 檔（翻譯快取、註解、標註、設定） ══════════ */
 
@@ -120,6 +122,10 @@ const handlers = {
   },
   'export.take': () => exportPayload,
   'openOptions': () => { openAux('options/options.html', { width: 900, height: 900 }); return true; },
+  'update.check': async (msg) => {
+    if (msg && msg.force) await updater.check(true);
+    return updater.status();
+  },
   'image.inline': async (msg) => {
     const out = {};
     for (const u of (msg.urls || []).slice(0, 200)) {
@@ -151,6 +157,7 @@ ipcMain.handle('pl:broadcast', (e, msg) => {
 });
 
 ipcMain.handle('pl:version', () => app.getVersion());
+ipcMain.on('pl:version-sync', (e) => { e.returnValue = app.getVersion(); });
 
 ipcMain.handle('pl:viewer-ready', (e) => {
   const w = BrowserWindow.fromWebContents(e.sender);
@@ -330,6 +337,9 @@ function buildMenu() {
         { label: '使用說明書', click: () => shell.openExternal(REPO + '/blob/main/%E4%BD%BF%E7%94%A8%E8%AA%AA%E6%98%8E%E6%9B%B8.md') },
         { label: '專案網頁', click: () => shell.openExternal(REPO) },
         { type: 'separator' },
+        { label: '檢查更新…', click: () => updater.check(true) },
+        { label: '所有版本與更新內容', click: () => shell.openExternal(REPO + '/releases') },
+        { type: 'separator' },
         {
           label: '關於 PaperLens',
           click: (m, w) => dialog.showMessageBox(w || undefined, {
@@ -379,6 +389,7 @@ if (!app.requestSingleInstanceLock()) {
 
     buildMenu();
     createViewer(pdfFromArgv(process.argv));
+    updater.init({ getStore: () => store, saveSoon: saveStoreSoon });
 
     app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createViewer(); });
   });
