@@ -111,6 +111,22 @@
     });
   }
 
+  /** 譯文字色：預設色票或自訂 */
+  function bindColor() {
+    const sel = $('transColorSel'), pick = $('transColorPick');
+    const cur = settings.transColor || 'auto';
+    const preset = [...sel.options].some((o) => o.value === cur);
+    sel.value = preset ? cur : 'custom';
+    pick.style.display = preset ? 'none' : '';
+    if (!preset && /^#[0-9a-f]{6}$/i.test(cur)) pick.value = cur;
+    sel.addEventListener('change', () => {
+      if (sel.value === 'custom') { pick.style.display = ''; pick.click(); return; }
+      pick.style.display = 'none';
+      save({ transColor: sel.value });
+    });
+    pick.addEventListener('change', () => save({ transColor: pick.value }));
+  }
+
   function bindRange(id, fmt) {
     const out = $(id + 'Out');
     const el = $(id);
@@ -286,10 +302,12 @@
     bindSelect('targetLang');
     bindSelect('sourceLang');
     bindSelect('transFont');
+    bindColor();
     bindSelect('defaultHighlight');
 
     bindCheck('autoFallback');
     bindCheck('skipChinese');
+    bindCheck('translateRefs');
     bindCheck('autoTranslate');
     bindCheck('lazyTranslate');
     bindCheck('bgTranslate');

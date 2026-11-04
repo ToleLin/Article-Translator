@@ -46,6 +46,8 @@
 
     <label class="chk"><input type="checkbox" id="autoFallback"> 某個引擎失敗時自動換下一個</label>
     <label class="chk"><input type="checkbox" id="skipChinese"> 已經是中文的段落就不翻</label>
+    <label class="chk"><input type="checkbox" id="translateRefs"> PDF 的參考文獻也要翻譯</label>
+    <p class="hint">預設保留原文：作者名、期刊名翻了反而查不到，而且中文常常塞不下、跟下一條疊在一起。改了之後重新開啟 PDF 生效。</p>
 
     <div class="field">
       <label for="geminiApiKey">Gemini API 金鑰（選用）</label>
@@ -91,8 +93,26 @@
         <option value='"Noto Serif TC", "Source Han Serif TC", "PingFang TC", "Microsoft JhengHei", serif'>思源宋體 / 襯線（適合長文閱讀）</option>
         <option value='"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif'>思源黑體 / 無襯線</option>
         <option value='"Microsoft JhengHei", sans-serif'>微軟正黑體</option>
-        <option value='inherit'>沿用原網站字體</option>
+        <option value='"DFKai-SB", "BiauKai", "Kaiti TC", "STKaiti", "KaiTi", serif'>楷體</option>
+        <option value='inherit'>沿用原網站字體（僅網頁）</option>
       </select>
+    </div>
+
+    <div class="field">
+      <label for="transColorSel">譯文字色</label>
+      <select id="transColorSel">
+        <option value="auto">跟原文一樣</option>
+        <option value="#111827">黑</option>
+        <option value="#4b5563">灰</option>
+        <option value="#1d4ed8">藍</option>
+        <option value="#047857">綠</option>
+        <option value="#92400e">咖啡</option>
+        <option value="#b91c1c">紅</option>
+        <option value="#6d28d9">紫</option>
+        <option value="custom">自訂…</option>
+      </select>
+      <input type="color" id="transColorPick" style="display:none; vertical-align: middle; margin-left: 6px;">
+      <p class="hint">閱讀時也可以直接按工具列的「Aa」調整。深色底的標題、圖說會維持原本的顏色。</p>
     </div>
 
     <div class="field inline">

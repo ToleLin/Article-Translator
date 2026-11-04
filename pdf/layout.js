@@ -207,18 +207,23 @@
 
   /* ══════════ 3. 欄間溝槽 ══════════ */
 
+  /** 參考文獻、編號清單掛在左邊的編號：「12.」「[12]」「(12)」 */
+  const HANG_LABEL = /^\s*[[(]?\d{1,3}[.)\]]?\s*$/;
+
   function findGutters(rows, W) {
     const gaps = [];
     for (const r of rows) {
-      let end = -Infinity, endH = 0;
+      let end = -Infinity, endH = 0, last = null;
       for (const it of r.items) {
         if (end > -Infinity) {
           const gap = it.x0 - end;
           const h = Math.max(endH, it.h);
           const c = (end + it.x0) / 2;
-          if (gap >= 0.45 * h && c > 0.12 * W && c < 0.88 * W) gaps.push({ a: end, b: it.x0, h, y: r.base });
+          // 編號跟它後面的文字之間的空白不是欄距（不然參考文獻會被切成「編號一欄、內容一欄」）
+          const hanging = last && HANG_LABEL.test(last.str) && last.x1 - last.x0 < 3 * h && gap < 2.2 * h;
+          if (!hanging && gap >= 0.45 * h && c > 0.12 * W && c < 0.88 * W) gaps.push({ a: end, b: it.x0, h, y: r.base });
         }
-        if (it.x1 > end) { end = it.x1; endH = it.h; }
+        if (it.x1 > end) { end = it.x1; endH = it.h; last = it; }
       }
     }
     if (gaps.length < 4) return [];
@@ -243,11 +248,11 @@
     }
     cands.sort((p, q) => q.v - p.v);
 
-    const out = [];
+    const found = [];
     for (const cand of cands.slice(0, 40)) {
-      if (out.length >= 3) break;
+      if (found.length >= 8) break;
       const bx = cand.x;
-      if (out.some((gu) => Math.abs(gu.xc - bx) < 0.08 * W)) continue;
+      if (found.some((gu) => bx >= gu.a - 1 && bx <= gu.b + 1)) continue;   // 同一條溝槽的另一個高原
       const sup = gaps.filter((gp) => gp.a <= bx && gp.b >= bx);
       if (sup.length < 4) continue;
 
@@ -286,7 +291,15 @@
       const lo = Math.min(a, b - 0.5), hi = Math.max(b, a + 0.5);
       const gu = { a: lo, b: hi, xc: (lo + hi) / 2, spans: [], support: members.length };
       gu.spans = columnRuns(rows, gu, hAll);
-      if (gu.spans.length) out.push(gu);
+      if (gu.spans.length) found.push(gu);
+    }
+    // 互相重疊、或靠太近的候選只留證據最多的那條：
+    // 左欄段落最後一行很短時，「行尾 → 右欄」的大空白會跟真正的欄距疊在一起，變成一條假的溝槽
+    const out = [];
+    for (const gu of found.sort((p, q) => q.support - p.support)) {
+      if (out.length >= 3) break;
+      if (out.some((o) => Math.min(o.b, gu.b) - Math.max(o.a, gu.a) > -1 || Math.abs(o.xc - gu.xc) < 0.08 * W)) continue;
+      out.push(gu);
     }
     return out.sort((p, q) => p.xc - q.xc);
   }
@@ -435,7 +448,9 @@
     const h = Math.max(L.h, f.h);
     if (Math.abs(L.h - f.h) > 0.1 * h) return false;
     // 圖內的小字：「~33%」「R Y G」這種只有數字或單一字母的行，不要跟上下的標籤接在一起
-    if (h < 0.9 * bodyH && (!WORDY.test(L.text) || !WORDY.test(f.text))) return false;
+    // （參考文獻的最後一行「016005 (2024).」例外：上面是一條編號開頭的清單項目、這行對齊懸掛縮排）
+    const listCont = LIST_RE.test(B.lines[0].text) && !LIST_RE.test(f.text) && f.x0 > B.lines[0].x0 + 0.6 * h;
+    if (h < 0.9 * bodyH && !listCont && (!WORDY.test(L.text) || !WORDY.test(f.text))) return false;
     const d = f.base - L.base;
     if (d < 0.5 * h) return false;
     if (B.lines.length >= 2) {
@@ -611,6 +626,49 @@
   }
 
   const ENDS_SENTENCE = /[.!?。！？:：;；]["”’)\]]*$/;
+
+  /* ══════════ 參考文獻 ══════════
+     標成 b.ref，檢視器預設不翻：作者名、期刊名翻了反而錯，而且中文常常塞不下、跟下一條疊在一起。
+     認法：「References」標題之後長得像引用的段落；或同一頁至少 3 條「編號＋作者＋年份」的條目。 */
+
+  const REF_HEAD = /^(references?|reference list|bibliography|literature cited|works cited|cited literature|參考文獻|参考文献|引用文獻)$/i;
+  const REF_END = /^(appendix|appendices|supplementary|supporting information|acknowledg|author contributions|data availability|conflicts? of interest|competing interests|funding|附錄)/i;
+  const NUM_LABEL = /^\s*[[(]?\d{1,3}[.)\]]?\s+\S/;
+  const YEAR = /(?:^|[^\d])(1[89]\d{2}|20\d{2})[a-z]?(?:[^\d]|$)/;
+  // Zhong, H. Z.／K. He,／et al.／Smith J,
+  const AUTHOR = /\p{Lu}[\p{L}'’-]+,\s+(?:\p{Lu}\.\s?-?\s?){1,3}|(?:^|[\s,])(?:\p{Lu}\.\s?-?){1,3}\s?\p{Lu}[\p{L}'’-]+[,.]|\bet al\b|\p{Lu}[\p{L}'’-]+\s\p{Lu}{1,3},/u;
+  const looksCitation = (t) => YEAR.test(t) && AUTHOR.test(t);
+  // 已經在參考文獻區裡：寫全名的格式（Jimmy Lei Ba, Jamie Ryan Kiros, and …. 2016.）也算
+  const NAME_FIRST = /^\s*(?:[[(]?\d{1,3}[.)\]]?\s+)?\p{Lu}[\p{L}'’.-]*(?:\s+(?:\p{Lu}[\p{L}'’.-]*|van|von|de|der|da|di|del|la|le))*,/u;
+  const NAME = "\\p{Lu}[\\p{L}'’.-]*(?:\\s+\\p{Lu}[\\p{L}'’.-]*){0,4}";
+  const TWO_AUTHORS = new RegExp('^\\s*' + NAME + '\\s+(?:and|&)\\s+\\p{Lu}', 'u');          // Rie Kubota Ando and Tong Zhang.
+  const ONE_AUTHOR = new RegExp('^\\s*' + NAME + '\\.\\s+(?:\\(?(?:1[89]|20)\\d{2}|\\p{Lu})', 'u');   // Wilson L Taylor. 1953.
+  const looksCitationLoose = (t) => looksCitation(t) || (YEAR.test(t)
+    && (NAME_FIRST.test(t) || NUM_LABEL.test(t) || TWO_AUTHORS.test(t) || ONE_AUTHOR.test(t)));
+  // 附錄標題：「A. Object Detection Baselines」「A.1 Illustration of …」
+  const APPENDIX_HEAD = /^[A-H](?:\.\d+)*\.?\s+\p{Lu}/u;
+
+  function markReferences(pages) {
+    let inRefs = false, lastRef = false;
+    for (const pg of pages) {
+      const numbered = [];
+      for (const b of pg.blocks) {
+        if (b.skip === 'running') continue;
+        if (b.skip) continue;
+        const t = b.text.trim();
+        const bare = t.replace(/^[\dIVX]+\.?\s+/, '').replace(/[:：]$/, '');
+        if (t.length < 40 && REF_HEAD.test(bare)) { inRefs = true; lastRef = false; continue; }
+        if (t.length < 60 && (REF_END.test(bare) || (inRefs && APPENDIX_HEAD.test(t) && !YEAR.test(t)))) { inRefs = false; continue; }
+        if (NUM_LABEL.test(t) && looksCitation(t)) numbered.push(b);
+        // 小寫開頭、緊接在一條參考文獻後面：換欄／換頁接著寫的那一條的後半
+        if (inRefs && (looksCitationLoose(t) || (b.prev && b.prev.ref) || (lastRef && /^[a-z(]/.test(t)))) b.ref = true;
+        lastRef = !!b.ref;
+      }
+      if (numbered.length >= 3) numbered.forEach((b) => { b.ref = true; });
+      // 跨欄、跨頁接著寫的同一條：一起算
+      for (const b of pg.blocks) if (b.ref && b.next) b.next.ref = true;
+    }
+  }
 
   /* ══════════ 主流程 ══════════ */
 
@@ -792,6 +850,7 @@
       }
     }
 
+    markReferences(out);
     return { pages: out, bodyH, vocab };
   }
 

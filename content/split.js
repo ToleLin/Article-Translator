@@ -303,6 +303,8 @@
     bar.appendChild(modeWrap);
     PL.els.modeWrap = modeWrap;
 
+    if (PL.TextStyle) bar.appendChild(PL.TextStyle.makeButton());
+
     const btnSync = PL.el('button', { id: 'pl-sync', text: '同步捲動', title: '讓兩欄跟著同一段落' });
     btnSync.classList.toggle('pl-on', !!PL.settings.syncScroll);
     btnSync.addEventListener('click', () => {
@@ -369,6 +371,7 @@
     root.style.setProperty('--pl-trans-font', s.transFont);
     root.style.setProperty('--pl-trans-lh', String(s.transLineHeight));
     root.classList.toggle('pl-dim', !!s.dimOriginal);
+    if (PL.TextStyle) PL.TextStyle.apply();
     if (PL.els.right) PL.els.right.style.fontSize = (s.transFontScale || 1) === 1 ? '' : (s.transFontScale * 100) + '%';
   }
   PL.applyLook = applyLook;

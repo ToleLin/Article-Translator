@@ -16,6 +16,7 @@ const CONTENT_JS = [
   'content/annotate.js',
   'content/overlay.js',
   'content/geminikey.js',
+  'content/textstyle.js',
   'content/export.js',
   'content/boot.js'
 ];

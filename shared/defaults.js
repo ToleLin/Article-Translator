@@ -22,10 +22,12 @@
     syncScroll: true,
     splitRatio: 0.5,                // 左欄寬度比例
     skipChinese: true,              // 已經是中文的段落不翻
+    translateRefs: false,           // PDF 的參考文獻要不要翻（作者名、期刊名翻了反而錯，預設保留原文）
 
     /* --- 外觀 --- */
     transFont: '"Noto Serif TC", "Source Han Serif TC", "PingFang TC", "Microsoft JhengHei", serif',
     transFontScale: 1.0,
+    transColor: 'auto',             // 譯文字色：auto = 跟原文一樣；或 #rrggbb
     transLineHeight: 1.9,
     dimOriginal: false,             // 左欄稍微變淡，讓視線集中在右欄
 

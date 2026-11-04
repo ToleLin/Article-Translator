@@ -485,7 +485,8 @@ html.pl-drawing .pl-pane { user-select: none; }
 #pl-clearmenu button:hover { background: #fee2e2; color: #b91c1c; }
 
 /* 選取時另一邊對應的句子 */
-::highlight(pl-sync) { background-color: rgba(250, 204, 21, .5); }
+::highlight(pl-sync-ctx) { background-color: rgba(250, 204, 21, .16); }
+::highlight(pl-sync) { background-color: rgba(250, 204, 21, .62); }
 
 /* ══════════ 翻譯選取的文字 ══════════ */
 
@@ -515,6 +516,10 @@ html.pl-drawing .pl-pane { user-select: none; }
   font-size: 15px; line-height: 1.75; white-space: pre-wrap; user-select: text;
 }
 #pl-qt .pl-qt-out.pl-wait { color: var(--pl-muted); font-size: 13px; }
+/* 顯示原文：上面是選的中文、下面是英文原文 */
+#pl-qt.pl-qt-orig .pl-qt-src { font-family: var(--pl-trans-font, "Noto Serif TC", "PingFang TC", "Microsoft JhengHei", serif); }
+#pl-qt.pl-qt-orig .pl-qt-out { font-family: Georgia, "Times New Roman", serif; font-size: 14.5px; line-height: 1.6; }
+#pl-qt .pl-qt-out mark { background: rgba(250, 204, 21, .6); color: inherit; border-radius: 2px; padding: 0 1px; }
 #pl-qt .pl-qt-meta { font-size: 11.5px; color: var(--pl-muted); }
 #pl-qt .pl-row { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
 #pl-qt button:not(.pl-x), #pl-qt select {
@@ -590,3 +595,65 @@ html.pl-side-open > body { padding-right: var(--pl-side-w, 320px) !important; }
   cursor: col-resize; z-index: 2;
 }
 #pl-side-grip:hover, #pl-side-grip.pl-dragging { background: var(--pl-accent); }
+
+/* ══════════ 譯文外觀（工具列「Aa」） ══════════ */
+
+#pl-bar .pl-style-btn { font-family: Georgia, "Times New Roman", serif; font-weight: 700; letter-spacing: .3px; }
+
+/* 網頁對照：選了字色就套在譯文上（連結、螢光標記維持原樣）；PDF 的規則在 pdfview.css */
+html[data-pl-color] #pl-right [data-pl-done]:not(.pl-tr),
+html[data-pl-color] #pl-right [data-pl-done]:not(.pl-tr) :not(a):not(mark):not(code):not(pre) {
+  color: var(--pl-trans-color) !important;
+}
+
+#pl-style {
+  position: fixed; z-index: 2147483644;
+  display: none; flex-direction: column; gap: 10px;
+  width: 324px; padding: 11px 13px 12px;
+  background: var(--pl-bg); color: var(--pl-fg);
+  border: 1px solid var(--pl-line); border-radius: 12px;
+  box-shadow: 0 10px 34px rgba(0, 0, 0, .25);
+  font: 13px/1.5 system-ui, "Microsoft JhengHei", "PingFang TC", sans-serif;
+}
+#pl-style.pl-show { display: flex; }
+#pl-style header { display: flex; align-items: center; }
+#pl-style header b { color: var(--pl-accent); }
+#pl-style .pl-spacer { flex: 1; }
+#pl-style .pl-x { border: 0; background: transparent; color: var(--pl-muted); cursor: pointer; font-size: 14px; }
+#pl-style .pl-st-h { font-size: 12px; color: var(--pl-muted); margin-bottom: 5px; }
+#pl-style .pl-st-h output { color: var(--pl-fg); font-weight: 600; margin-left: 4px; }
+#pl-style .pl-st-fonts { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+#pl-style .pl-st-font {
+  font-size: 15px; padding: 6px 0; cursor: pointer;
+  border: 1px solid var(--pl-line); border-radius: 8px; background: var(--pl-bg); color: var(--pl-fg);
+}
+#pl-style .pl-st-font:hover { border-color: var(--pl-accent); }
+#pl-style .pl-st-font.pl-cur { border-color: var(--pl-accent); box-shadow: 0 0 0 2px rgba(79, 70, 229, .25); color: var(--pl-accent); }
+#pl-style .pl-st-colors { display: flex; flex-wrap: wrap; gap: 7px; align-items: center; }
+#pl-style .pl-st-color {
+  width: 24px; height: 24px; border-radius: 50%; cursor: pointer; padding: 0;
+  border: 2px solid var(--pl-bg); box-shadow: 0 0 0 1px var(--pl-line); position: relative;
+}
+#pl-style .pl-st-color.pl-auto {
+  width: auto; padding: 0 9px; border-radius: 12px; font-size: 12px;
+  background: var(--pl-panel); color: var(--pl-fg); border-color: var(--pl-panel);
+}
+#pl-style .pl-st-color.pl-cur { box-shadow: 0 0 0 2px var(--pl-accent); }
+#pl-style .pl-custom {
+  display: inline-block; overflow: hidden;
+  background: conic-gradient(#ef4444, #f59e0b, #22c55e, #06b6d4, #6366f1, #d946ef, #ef4444);
+}
+#pl-style .pl-custom input { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; border: 0; padding: 0; }
+#pl-style .pl-st-hint { margin: 5px 0 0; font-size: 11px; color: var(--pl-muted); }
+#pl-style .pl-st-row { display: flex; align-items: center; gap: 8px; }
+#pl-style .pl-st-range { flex: 1; accent-color: var(--pl-accent); }
+#pl-style .pl-st-row button {
+  font: inherit; font-size: 12.5px; cursor: pointer; padding: 3px 9px;
+  border: 1px solid var(--pl-line); border-radius: 8px; background: var(--pl-bg); color: var(--pl-fg);
+}
+#pl-style .pl-st-row button:hover { border-color: var(--pl-accent); color: var(--pl-accent); }
+#pl-style .pl-st-preview {
+  padding: 8px 10px; border-radius: 8px; background: var(--pl-panel); line-height: 1.7;
+  font-family: var(--pl-trans-font, "Noto Serif TC", serif);
+}
+

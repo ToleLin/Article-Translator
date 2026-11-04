@@ -178,6 +178,8 @@
       for (const blk of lp.blocks) {
         let state = blk.skip ? 'skip' : 'pending';
         if (state === 'pending' && PL.settings.skipChinese && PL.cjkRatio(blk.text) > 0.5) state = 'skip';
+        // 參考文獻預設保留原文（設定頁可以改成要翻）
+        if (state === 'pending' && blk.ref && !PL.settings.translateRefs) state = 'skip';
         blk.idx = PL.blocks.length;
         PL.blocks.push({
           i: blk.idx, page: pg, para: blk, left: null, right: null, rightText: null,
@@ -402,7 +404,7 @@
     }
     let fg = null, best = 0;
     for (const e of votes.values()) if (e.w > best) { best = e.w; fg = e.c; }
-    const res = { bg, fg: fg || (bl < 0.5 ? '#f4f6fb' : '#15171c') };
+    const res = { bg, fg: fg || (bl < 0.5 ? '#f4f6fb' : '#15171c'), light: bl >= 0.5 };
     if (l0.bg) blk.colors = res;
     return res;
   }
@@ -471,6 +473,7 @@
   function buildTransLayer(p, scale) {
     const layer = PL.el('div', { class: 'pdf-trlayer' });
     const lang = PL.settings.targetLang || 'zh-Hant';
+    const ready = [];
 
     for (const b of PL.blocks) {
       if (b.page !== p) continue;
@@ -501,16 +504,21 @@
       const c = blockColors(blk);
       el.style.color = c.fg;
       el.dataset.bg = c.bg;
+      // 淺色底的段落才套用使用者選的字色（藍底白字的橫幅維持白字）
+      if (c.light) el.classList.add('pl-light');
       el.append(bgs, tx);
 
       layer.appendChild(el);
       b.right = el;
       b.rightText = tx;
-      if (b.translated != null) fillTranslation(b);
+      if (b.translated != null) ready.push(b);
     }
 
     p.elR.appendChild(layer);
     p.trlayer = layer;
+    // 先放進頁面再填譯文：還沒放進去之前量不到高度（全部量成 0），
+    // 字級跟行距會算錯 —— 背景翻好的頁面、縮放過的頁面捲過去時字會疊在一起
+    for (const b of ready) fillTranslation(b);
   }
 
   /** 同一種原文字級 → 同一個譯文字級，整頁看起來才整齊；只有真的塞不下的段落才縮 */
@@ -534,6 +542,9 @@
    */
   function fitText(b) {
     const el = b.right, tx = b.rightText;
+    if (!el || !tx) return;
+    if (!el.isConnected) { b.needFit = true; return; }     // 等放進頁面再量
+    b.needFit = false;
     const blk = b.para;
     const scale = doc.fitR * doc.zoom;
     const box = boxOf(blk, scale);
@@ -553,8 +564,20 @@
     if (h > box.h + 0.5) {
       let lo = Math.max(MIN_PX, tfs * 0.5), hi = tfs;
       if (H(lo, K * lo) > box.h + 0.5) {
-        fs = lo;
-        h = H(fs, K * fs);
+        // 縮到一半還塞不下（譯文比原文長很多）：先把行距收緊、再容許小一點的字，
+        // 還是不行才讓方塊往下長 —— 長出去的部分會蓋到下一段，能不長就不長
+        const K2 = 1.06;
+        let lo2 = Math.max(MIN_PX * 0.8, tfs * 0.38), hi2 = lo;
+        if (H(lo2, K2 * lo2) <= box.h + 0.5) {
+          for (let k = 0; k < 8; k++) {
+            const mid = (lo2 + hi2) / 2;
+            if (H(mid, K2 * mid) <= box.h + 0.5) lo2 = mid; else hi2 = mid;
+          }
+          H(lo2, K2 * lo2);
+          return;
+        }
+        fs = lo2;
+        h = H(fs, K2 * fs);
         el.classList.add('pl-overflow');
         el.style.height = h + 'px';
         el.style.background = el.dataset.bg || '#fff';
@@ -570,6 +593,17 @@
     const n = Math.max(1, Math.round(h / (K * fs)));
     const lh = Math.min(1.85 * fs, Math.max(K * fs, box.h / n));
     H(fs, lh);
+  }
+
+  /** 字型、字級改了，或網頁字型晚一點才載入（字寬會變）：已經顯示的譯文重新量一次 */
+  function refitAll() {
+    for (const b of PL.blocks) {
+      if (b.right && b.rightText && b.translated != null && b.right.isConnected) fitText(b);
+    }
+  }
+  PL.refitTranslations = refitAll;
+  if (document.fonts && document.fonts.addEventListener) {
+    document.fonts.addEventListener('loadingdone', PL.debounce(refitAll, 150));
   }
 
   /* ══════════ 視窗範圍：渲染與翻譯 ══════════ */
@@ -1050,6 +1084,8 @@
   const engineList = () => (globalThis.PLDesktop ? ['google', 'edge', 'gemini'] : ['chrome', 'edge', 'google', 'gemini']);
 
   function wireBar() {
+    const styleBtn = $('pl-style-btn');
+    if (styleBtn) styleBtn.addEventListener('click', () => PL.TextStyle && PL.TextStyle.toggle(styleBtn));
     const engine = $('pl-engine');
     engine.appendChild(PL.el('option', { value: 'auto', text: '自動（依序備援）' }));
     engineList().forEach((k) => {
@@ -1566,9 +1602,17 @@
           else if (msg.command === 'zoom-out') setZoom(doc.zoom / 1.2);
           else if (msg.command === 'zoom-reset') setZoom(1);
           return { ok: true };
-        case 'pl.settings':
-          PL.settings = Object.assign({}, PL.settings, msg.patch || {});
+        case 'pl.settings': {
+          const patch = msg.patch || {};
+          PL.settings = Object.assign({}, PL.settings, patch);
+          // 設定頁改了外觀：馬上套用
+          if ('transFont' in patch || 'transColor' in patch || 'transFontScale' in patch) {
+            document.documentElement.style.setProperty('--pl-trans-font', PL.settings.transFont);
+            if (PL.TextStyle) PL.TextStyle.apply();
+            refitAll();
+          }
           return { ok: true };
+        }
         default:
           return null;
       }
@@ -1638,6 +1682,7 @@
 
     document.documentElement.classList.add('pl-active');
     document.documentElement.style.setProperty('--pl-trans-font', PL.settings.transFont);
+    if (PL.TextStyle) PL.TextStyle.apply();
     document.documentElement.style.setProperty('--pl-left-w', (PL.settings.splitRatio * 100) + '%');
 
     wireBar();

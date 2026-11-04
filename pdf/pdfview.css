@@ -79,6 +79,9 @@ html { --pl-page-bg: var(--pl-panel); }
   font-kerning: normal;
 }
 
+/* 使用者在「Aa」選了字色：只套在淺色底的段落 */
+html[data-pl-color] .pl-tr.pl-light { color: var(--pl-trans-color) !important; }
+
 /* 還沒翻好之前完全不蓋原文，讓使用者先看得到內容 */
 .pl-tr:not([data-pl-done]) > .pl-trbg,
 .pl-tr:not([data-pl-done]) > .pl-trtx { display: none; }
