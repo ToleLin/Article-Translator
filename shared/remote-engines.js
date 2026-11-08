@@ -390,5 +390,48 @@
     return out;
   }
 
-  g.PLRemote = { googleTranslate, edgeTranslate, geminiTranslate, geminiTest, translate, explain };
+  /* ══════════ 查字（側邊翻譯）：Google 的字典資料 ══════════
+     一次拿到：譯文、音標、各詞性的多個中文意思（附反查的英文）、英英解釋、例句。
+     句子也能查（只會有譯文）。被限流時退回另一條端點，只給譯文。 */
+
+  const stripTags = (s) => String(s || '').replace(/<[^>]+>/g, '');
+
+  async function lookup(text, src, tgt) {
+    const q = String(text || '').trim();
+    if (!q) throw new Error('請輸入要查的字');
+    await pace('google', 300);
+    const params = new URLSearchParams({ client: 'gtx', dj: '1', sl: src || 'auto', tl: tgt, hl: 'zh-TW', q });
+    let d;
+    try {
+      const res = await fetch('https://translate.googleapis.com/translate_a/single?' + params
+        + '&dt=t&dt=bd&dt=rm&dt=md&dt=ex', { headers: { Accept: 'application/json' } });
+      if (res.status === 429) { const e = new Error('Google 暫時限流，請稍後再試'); e.rateLimited = true; throw e; }
+      if (!res.ok) throw new Error('Google 查詢回應 ' + res.status);
+      d = await res.json();
+    } catch (e) {
+      // 字典端點不通：至少給譯文
+      const t = await googleDictOnce(q, src, tgt);
+      return { translation: t, phonetic: '', src: src, dict: [], defs: [], examples: [], engine: 'google' };
+    }
+    const sentences = (d && d.sentences) || [];
+    const translation = sentences.map((x) => x.trans || '').join('').trim();
+    const rm = sentences.find((x) => x.src_translit) || {};
+    const dict = ((d && d.dict) || []).map((e) => {
+      const terms = (e.entry || []).map((x, k) => ({
+        word: x.word || '', back: (x.reverse_translation || []).slice(0, 4), k
+      })).filter((x) => x.word);
+      // Google 的順序常把罕用的單字（筴、猷）排在前面：主要譯文最前、兩個字以上的詞次之，其餘照原順序
+      const rank = (x) => (x.word === translation ? 0 : x.word.length < 2 ? 2 : 1);
+      terms.sort((a, b) => (rank(a) - rank(b)) || (a.k - b.k));
+      return { pos: e.pos || '', terms: terms.slice(0, 8).map((x) => ({ word: x.word, back: x.back })) };
+    }).filter((e) => e.terms.length);
+    const defs = ((d && d.definitions) || []).map((e) => ({
+      pos: e.pos || '',
+      items: (e.entry || []).slice(0, 3).map((x) => ({ gloss: x.gloss || '', example: stripTags(x.example) }))
+    })).filter((e) => e.items.length);
+    const examples = ((d && d.examples && d.examples.example) || []).slice(0, 3).map((x) => stripTags(x.text));
+    return { translation, phonetic: rm.src_translit || '', src: (d && d.src) || src, dict, defs, examples, engine: 'google' };
+  }
+
+  g.PLRemote = { googleTranslate, edgeTranslate, geminiTranslate, geminiTest, translate, explain, lookup };
 })(globalThis);

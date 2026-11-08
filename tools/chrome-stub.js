@@ -25,6 +25,13 @@
             case 'ai.warm': throw new Error('testbed 沒有內建 AI');
             case 'ai.translate': throw new Error('testbed 沒有內建 AI');
             case 'translate.remote': return { engine: msg.engine || 'testbed', result: msg.texts.map(fakeZh) };
+            case 'dict.lookup': return /\s/.test(msg.text.trim())
+              ? { translation: fakeZh(msg.text), phonetic: '', dict: [], defs: [], examples: [], engine: 'google' }
+              : { translation: '〔查〕' + msg.text, phonetic: 'ˈtest', engine: 'google',
+                dict: [{ pos: '名詞', terms: [{ word: '方案', back: ['plan', 'scheme'] }, { word: '構想', back: ['idea', 'scheme'] }] },
+                  { pos: '動詞', terms: [{ word: '密謀', back: ['scheme', 'plot'] }] }],
+                defs: [{ pos: '名詞', items: [{ gloss: 'a large-scale systematic plan.', example: 'a pension scheme' }] }],
+                examples: ['the scheme was approved'] };
             // 「✦ Gemini」的測試金鑰：AIza 開頭的假金鑰就當作可用，其他的回報金鑰無效
             case 'gemini.test':
               if (/^AIza/.test(msg.key || '')) return { ms: 420, sample: '超表面把不同顏色的光導向晶片上的不同位置。', model: msg.model };

@@ -320,8 +320,13 @@
     });
     bar.appendChild(btnInk);
 
+    const btnLook = PL.el('button', { id: 'pl-lookupbtn', text: '查字', title: '側邊翻譯：查單字、翻一句話，不會動到文章（選字後也會自動查）' });
+    btnLook.addEventListener('click', () => PL.toggleSidebar(undefined, 'tr'));
+    bar.appendChild(btnLook);
+    PL.els.lookupBtn = btnLook;
+
     const btnSide = PL.el('button', { id: 'pl-sidebtn', text: '註解' });
-    btnSide.addEventListener('click', () => PL.toggleSidebar());
+    btnSide.addEventListener('click', () => PL.toggleSidebar(undefined, 'notes'));
     bar.appendChild(btnSide);
     PL.els.sideBtn = btnSide;
 

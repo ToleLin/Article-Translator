@@ -22,7 +22,8 @@
     syncScroll: true,
     splitRatio: 0.5,                // 左欄寬度比例
     skipChinese: true,              // 已經是中文的段落不翻
-    translateRefs: false,           // PDF 的參考文獻要不要翻（作者名、期刊名翻了反而錯，預設保留原文）
+    translateRefs: false,
+    lookupOnSelect: true,           // 側邊「查字・翻譯」開著時，選字就自動查           // PDF 的參考文獻要不要翻（作者名、期刊名翻了反而錯，預設保留原文）
 
     /* --- 外觀 --- */
     transFont: '"Noto Serif TC", "Source Han Serif TC", "PingFang TC", "Microsoft JhengHei", serif',
@@ -34,6 +35,7 @@
     /* --- 註解 --- */
     defaultHighlight: 'yellow',
     showSidebar: false,
+    sideTab: 'notes',               // 側欄上次開的分頁：notes（註解）／tr（查字・翻譯）
     sidebarWidth: 320,
 
     /* --- 匯出 --- */

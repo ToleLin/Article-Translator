@@ -100,6 +100,11 @@ const NO_AI = '桌面版沒有 Chrome 內建 AI（那是 Chrome 瀏覽器才有�
 
 const handlers = {
   'translate.remote': (msg) => PLRemote.translate(msg, settings()),
+  'dict.lookup': (msg) => {
+    const map = globalThis.PL_mapLang;
+    const src = msg.sourceLang && msg.sourceLang !== 'auto' ? map('google', msg.sourceLang) : 'auto';
+    return PLRemote.lookup(msg.text, src, map('google', msg.targetLang || settings().targetLang));
+  },
   'gemini.test': (msg) => {
     if (!msg.key) throw new Error('請先貼上金鑰');
     return PLRemote.geminiTest(msg.key, msg.model, globalThis.PL_mapLang('gemini', msg.targetLang || settings().targetLang));
@@ -316,6 +321,7 @@ function buildMenu() {
       label: '檢視',
       submenu: [
         { label: '註解側欄', accelerator: 'CmdOrCtrl+B', click: (m, w) => send(w, { type: 'pl.command', command: 'sidebar' }) },
+        { label: '查字・翻譯（側欄）', accelerator: 'CmdOrCtrl+L', click: (m, w) => send(w, { type: 'pl.command', command: 'lookup' }) },
         { type: 'separator' },
         // Ctrl+= / Ctrl+- / Ctrl+0 放大縮小的是「PDF 頁面」（Ctrl+滾輪也可以）；介面字太小再用下面那三個
         { label: '放大頁面', accelerator: 'CmdOrCtrl+=', click: (m, w) => send(w, { type: 'pl.command', command: 'zoom-in' }) },

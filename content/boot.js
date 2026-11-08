@@ -92,7 +92,10 @@
             PL.translateAll();
           } else if (msg.command === 'sidebar') {
             if (!PL.active) await PL.activate();
-            PL.toggleSidebar();
+            PL.toggleSidebar(undefined, 'notes');
+          } else if (msg.command === 'lookup') {
+            if (!PL.active) await PL.activate();
+            PL.toggleSidebar(undefined, 'tr');
           } else if (msg.command === 'retry') {
             PL.retryFailed();
           }

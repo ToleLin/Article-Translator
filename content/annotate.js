@@ -1183,6 +1183,8 @@
   function quickTranslate(info) {
     const src = (info.fullText || info.text || '').trim();
     if (!src) { PL.toast('請先選取要翻譯的文字'); return; }
+    // 只選了一個字或短詞：在側邊查字典就好，不用連整段一起翻
+    if (PL.active && PL.Lookup && PL.Lookup.isShort(src) && PL.lookupInSide(src)) return;
     const p = qtPopup();
     qtState = { info, src, out: '' };
     setQtMode('tr');
@@ -1220,19 +1222,29 @@
     if (PL.els.side) return PL.els.side;
     const el = PL.el('div', { id: 'pl-side', 'data-pl-ui': '1' });
 
+    // 兩個分頁：側邊翻譯（查字）／我的註解
     const head = PL.el('header');
-    head.appendChild(PL.el('span', { text: '我的註解' }));
+    const tabs = PL.el('div', { class: 'pl-tabs' });
+    const tTr = PL.el('button', { class: 'pl-tab', 'data-tab': 'tr', text: '🔤 查字・翻譯', title: '側邊翻譯：查單字、翻一句話，不會動到文章' });
+    const tNotes = PL.el('button', { class: 'pl-tab', 'data-tab': 'notes', text: '📝 我的註解' });
+    tabs.append(tTr, tNotes);
+    tabs.addEventListener('click', (e) => {
+      const b = e.target.closest && e.target.closest('[data-tab]');
+      if (b) setSideTab(b.getAttribute('data-tab'));
+    });
+    head.appendChild(tabs);
     head.appendChild(PL.el('span', { class: 'pl-spacer' }));
 
-    const bExport = PL.el('button', { text: '匯出', title: '把本頁註解存成 JSON' });
+    const bExport = PL.el('button', { class: 'pl-side-export', text: '匯出', title: '把本頁註解存成 JSON' });
     bExport.addEventListener('click', exportJson);
     head.appendChild(bExport);
 
-    const bClose = PL.el('button', { text: '✕' });
+    const bClose = PL.el('button', { text: '✕', title: '關閉側欄' });
     bClose.addEventListener('click', () => PL.toggleSidebar(false));
     head.appendChild(bClose);
 
     const list = PL.el('div', { class: 'pl-list' });
+    const trPane = PL.el('div', { class: 'pl-trpane' });
 
     // 左緣的寬度把手
     const grip = PL.el('div', { id: 'pl-side-grip', title: '拖曳調整註解欄寬度' });
@@ -1259,14 +1271,41 @@
       if (PL.Overlay) PL.Overlay.reproject();
     }, true);
 
-    el.append(grip, head, list);
+    el.append(grip, head, list, trPane);
     document.documentElement.appendChild(el);
     if (PL.settings && PL.settings.sidebarWidth) {
       document.documentElement.style.setProperty('--pl-side-w', PL.settings.sidebarWidth + 'px');
     }
     PL.els.side = el;
     PL.els.sideList = list;
+    PL.els.sideTr = trPane;
+    if (PL.Lookup) PL.Lookup.mount(trPane);
+    setSideTab(PL.settings && PL.settings.sideTab === 'tr' && PL.Lookup ? 'tr' : 'notes');
     return el;
+  }
+
+  let sideTab = 'notes';
+  PL.sideTab = () => (document.documentElement.classList.contains('pl-side-open') ? sideTab : null);
+
+  function setSideTab(tab) {
+    if (tab === 'tr' && !PL.Lookup) tab = 'notes';
+    sideTab = tab;
+    const el = PL.els.side;
+    if (!el) return;
+    el.setAttribute('data-tab', tab);
+    el.querySelectorAll('.pl-tab').forEach((b) => b.classList.toggle('pl-cur', b.getAttribute('data-tab') === tab));
+    if (tab === 'notes') renderSidebar();
+    paintSideButtons();
+    if (PL.settings && PL.settings.sideTab !== tab) {
+      PL.settings.sideTab = tab;
+      globalThis.PL_saveSettings({ sideTab: tab });
+    }
+  }
+
+  function paintSideButtons() {
+    const open = document.documentElement.classList.contains('pl-side-open');
+    if (PL.els.sideBtn) PL.els.sideBtn.classList.toggle('pl-on', open && sideTab === 'notes');
+    if (PL.els.lookupBtn) PL.els.lookupBtn.classList.toggle('pl-on', open && sideTab === 'tr');
   }
 
   const renderSidebarSoon = PL.debounce(() => renderSidebar(), 400);
@@ -1331,15 +1370,34 @@
   }
   PL.renderSidebar = renderSidebar;
 
-  PL.toggleSidebar = function (force) {
+  /**
+   * force：true 打開、false 關掉、不給就切換。
+   * tab：'notes'（註解）或 'tr'（查字・翻譯）。側欄已經開著、但是另一個分頁 → 只換分頁，不會關掉
+   */
+  PL.toggleSidebar = function (force, tab) {
     sidebar();
     const root = document.documentElement;
-    const next = (force === undefined) ? !root.classList.contains('pl-side-open') : !!force;
+    const open = root.classList.contains('pl-side-open');
+    let next;
+    if (force !== undefined) next = !!force;
+    else if (tab && open && tab !== sideTab) next = true;
+    else next = !open;
+    if (tab) setSideTab(tab);
     root.classList.toggle('pl-side-open', next);
-    if (PL.els.sideBtn) PL.els.sideBtn.classList.toggle('pl-on', next);
-    if (next) renderSidebar();
-    PL.Sync.markDirty();
-    globalThis.PL_saveSettings({ showSidebar: next });
+    paintSideButtons();
+    if (next && sideTab === 'notes') renderSidebar();
+    if (next && sideTab === 'tr' && PL.Lookup) PL.Lookup.focus();
+    if (PL.Sync) PL.Sync.markDirty();
+    if (PL.Overlay) PL.Overlay.reproject();
+    if (open !== next) globalThis.PL_saveSettings({ showSidebar: next });
+  };
+
+  /** 側邊翻譯：打開「查字・翻譯」分頁並查這段文字 */
+  PL.lookupInSide = function (text) {
+    if (!PL.Lookup) return false;
+    PL.toggleSidebar(true, 'tr');
+    PL.Lookup.lookup(text);
+    return true;
   };
 
   function exportJson() {
@@ -1365,6 +1423,8 @@
         pendingRange = info;
         showSelBar(info);
         syncSelection(info);
+        // 側邊「查字・翻譯」開著：選了就在側欄查
+        if (PL.Lookup && PL.Lookup.wantsSelection()) PL.Lookup.fromSelection(info.fullText || info.text);
       }, 10);
     }, true);
 

@@ -17,6 +17,7 @@ const CONTENT_JS = [
   'content/overlay.js',
   'content/geminikey.js',
   'content/textstyle.js',
+  'content/lookup.js',
   'content/export.js',
   'content/boot.js'
 ];
@@ -250,6 +251,13 @@ const handlers = {
   async 'openOptions'() {
     await chrome.runtime.openOptionsPage();
     return true;
+  },
+
+  async 'dict.lookup'(msg) {
+    const s = await PL_loadSettings();
+    const tgt = PL_mapLang('google', msg.targetLang || s.targetLang);
+    const src = msg.sourceLang && msg.sourceLang !== 'auto' ? PL_mapLang('google', msg.sourceLang) : 'auto';
+    return PLRemote.lookup(msg.text, src, tgt);
   },
 
   async 'update.check'(msg) {

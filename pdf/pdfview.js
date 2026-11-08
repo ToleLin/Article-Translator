@@ -1149,7 +1149,9 @@
     });
 
     PL.els.sideBtn = $('pl-sidebtn');
-    $('pl-sidebtn').addEventListener('click', () => PL.toggleSidebar());
+    $('pl-sidebtn').addEventListener('click', () => PL.toggleSidebar(undefined, 'notes'));
+    PL.els.lookupBtn = $('pl-lookupbtn');
+    $('pl-lookupbtn').addEventListener('click', () => PL.toggleSidebar(undefined, 'tr'));
     $('pl-export').addEventListener('click', doExport);
     $('pl-options').addEventListener('click', () => PL.send({ type: 'openOptions' }).catch(() => {}));
   }
@@ -1593,7 +1595,8 @@
           if (msg.command === 'highlight-selection') PL.highlightSelection(false);
           else if (msg.command === 'explain-selection') PL.highlightSelection(true);
           else if (msg.command === 'translate-all') translateAll();
-          else if (msg.command === 'sidebar') PL.toggleSidebar();
+          else if (msg.command === 'sidebar') PL.toggleSidebar(undefined, 'notes');
+          else if (msg.command === 'lookup') PL.toggleSidebar(undefined, 'tr');
           else if (msg.command === 'retry') PL.retryFailed();
           else if (msg.command === 'export-pdf') doExport();
           else if (msg.command === 'gemini-key') PL.openGeminiDialog();
