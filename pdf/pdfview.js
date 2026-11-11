@@ -18,7 +18,8 @@
   pdfjsLib.GlobalWorkerOptions.workerSrc = chrome.runtime.getURL('vendor/pdf.worker.min.js');
 
   const $ = (id) => document.getElementById(id);
-  const MAX_DPR = 1.5;          // 左右各一張畫布，解析度別開太高
+  const MAX_DPR = 2;            // 高解析度螢幕最多畫到 2 倍，再高只是浪費記憶體
+  const MAX_PIXELS = 16e6;      // 每張畫布的像素上限（放很大時自動降一點解析度，免得吃光記憶體）
   const KEEP_PAGES = 4;         // 離視窗太遠的頁面把畫布釋放掉
   const CJK_SCALE = 0.88;       // 同字級的中文看起來比英文大一圈，縮一點才會跟原文一樣「重」
   const MIN_PX = 5.5;           // 再小就看不清楚了，寧可讓方塊長出去
@@ -27,7 +28,7 @@
   const doc = {
     pdf: null, url: '', title: '',
     raw: null, layout: null,
-    pages: [], zoom: 1, fitL: 1, fitR: 1,
+    pages: [], zoom: 1, fitL: 1, fitR: 1, layoutGen: 0,
     columnMode: 'auto'
   };
 
@@ -222,12 +223,15 @@
   /* ══════════ 版面：左右兩欄各放同一份頁面 ══════════ */
 
   function layoutPages() {
+    doc.layoutGen++;
     const hostL = $('pl-pages'), hostR = $('pl-out');
     hostL.textContent = '';
     hostR.textContent = '';
 
-    const wL = Math.max(240, ($('pl-left').clientWidth || 620) - 30);
-    const wR = Math.max(240, ($('pl-right').clientWidth || 620) - 30);
+    // 「僅譯文／僅原文」時有一欄是藏起來的（寬度 0）：跟看得到的那一欄用一樣的大小
+    const cwL = $('pl-left').clientWidth, cwR = $('pl-right').clientWidth;
+    const wL = Math.max(240, (cwL || cwR || 620) - 30);
+    const wR = Math.max(240, (cwR || cwL || 620) - 30);
     const base = doc.pages[0] ? doc.pages[0].w : 600;
     doc.fitL = wL / base;
     doc.fitR = wR / base;
@@ -264,27 +268,49 @@
   async function renderPage(p) {
     if (p.rendered || p.rendering) return;
     p.rendering = true;
+    const gen = doc.layoutGen;
     try {
       const scaleL = doc.fitL * doc.zoom;
       const scaleR = doc.fitR * doc.zoom;
-      const dpr = Math.min(MAX_DPR, globalThis.devicePixelRatio || 1);
+      // 只渲染一次，用「比較大的那一欄」的解析度畫，另一欄用縮小的。
+      // （以前固定用左欄的大小畫、右欄拿去放大：右欄比較寬的時候 —— 僅譯文、拖過分隔線 ——
+      //   公式和圖片會糊掉）
+      const big = Math.max(scaleL, scaleR);
+      let dpr = Math.min(MAX_DPR, globalThis.devicePixelRatio || 1);
+      const px = (p.w * big * dpr) * (p.h * big * dpr);
+      if (px > MAX_PIXELS) dpr *= Math.sqrt(MAX_PIXELS / px);
 
-      const vp = p.page.getViewport({ scale: scaleL * dpr });
-      const canvasL = document.createElement('canvas');
-      canvasL.width = Math.round(vp.width);
-      canvasL.height = Math.round(vp.height);
-      const ctx = canvasL.getContext('2d', { alpha: false });
+      const vp = p.page.getViewport({ scale: big * dpr });
+      const master = document.createElement('canvas');
+      master.width = Math.round(vp.width);
+      master.height = Math.round(vp.height);
+      const ctx = master.getContext('2d', { alpha: false });
       ctx.fillStyle = '#fff';
-      ctx.fillRect(0, 0, canvasL.width, canvasL.height);
+      ctx.fillRect(0, 0, master.width, master.height);
       await p.page.render({ canvasContext: ctx, viewport: vp }).promise;
+      if (gen !== doc.layoutGen) return;          // 畫到一半版面重排了（縮放、視窗大小改變），這張作廢
 
-      if (!p.colored) colorize(p, canvasL, scaleL * dpr);
+      if (!p.colored) colorize(p, master, big * dpr);
 
-      // 右欄畫同一張圖，不用再跑一次渲染
-      const canvasR = document.createElement('canvas');
-      canvasR.width = Math.round(p.w * scaleR * dpr);
-      canvasR.height = Math.round(p.h * scaleR * dpr);
-      canvasR.getContext('2d', { alpha: false }).drawImage(canvasL, 0, 0, canvasR.width, canvasR.height);
+      const scaled = (scale) => {
+        if (scale === big) return master;
+        const c = document.createElement('canvas');
+        c.width = Math.max(1, Math.round(p.w * scale * dpr));
+        c.height = Math.max(1, Math.round(p.h * scale * dpr));
+        const cx = c.getContext('2d', { alpha: false });
+        cx.imageSmoothingEnabled = true;
+        cx.imageSmoothingQuality = 'high';
+        cx.drawImage(master, 0, 0, c.width, c.height);
+        return c;
+      };
+      const canvasL = scaled(scaleL);
+      let canvasR = scaled(scaleR);
+      if (canvasR === canvasL) {                  // 兩欄一樣大：一張畫布不能同時放在兩個地方，複製一張
+        canvasR = document.createElement('canvas');
+        canvasR.width = master.width;
+        canvasR.height = master.height;
+        canvasR.getContext('2d', { alpha: false }).drawImage(master, 0, 0);
+      }
 
       mountCanvas(p.elL, canvasL);
       mountCanvas(p.elR, canvasR);
@@ -305,6 +331,8 @@
       if (w) w.textContent = '第 ' + p.num + ' 頁渲染失敗';
     } finally {
       p.rendering = false;
+      // 作廢的那一張：版面已經換新的了，照新的大小再畫一次
+      if (gen !== doc.layoutGen) updateViewportSoon();
     }
   }
 
@@ -1150,6 +1178,8 @@
 
     PL.els.sideBtn = $('pl-sidebtn');
     $('pl-sidebtn').addEventListener('click', () => PL.toggleSidebar(undefined, 'notes'));
+    PL.els.askBtn = $('pl-askbtn');
+    $('pl-askbtn').addEventListener('click', () => PL.toggleSidebar(undefined, 'ai'));
     PL.els.lookupBtn = $('pl-lookupbtn');
     $('pl-lookupbtn').addEventListener('click', () => PL.toggleSidebar(undefined, 'tr'));
     $('pl-export').addEventListener('click', doExport);
@@ -1597,6 +1627,7 @@
           else if (msg.command === 'translate-all') translateAll();
           else if (msg.command === 'sidebar') PL.toggleSidebar(undefined, 'notes');
           else if (msg.command === 'lookup') PL.toggleSidebar(undefined, 'tr');
+          else if (msg.command === 'ask-ai') PL.toggleSidebar(undefined, 'ai');
           else if (msg.command === 'retry') PL.retryFailed();
           else if (msg.command === 'export-pdf') doExport();
           else if (msg.command === 'gemini-key') PL.openGeminiDialog();

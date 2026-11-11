@@ -93,6 +93,9 @@
           } else if (msg.command === 'sidebar') {
             if (!PL.active) await PL.activate();
             PL.toggleSidebar(undefined, 'notes');
+          } else if (msg.command === 'ask-ai') {
+            if (!PL.active) await PL.activate();
+            PL.toggleSidebar(undefined, 'ai');
           } else if (msg.command === 'lookup') {
             if (!PL.active) await PL.activate();
             PL.toggleSidebar(undefined, 'tr');

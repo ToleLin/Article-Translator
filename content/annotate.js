@@ -368,6 +368,17 @@
     });
     bar.appendChild(bAI);
 
+    // 針對這段向 AI 提問（側欄，可以連續追問）
+    const bAsk = PL.el('button', { class: 'pl-sel-ask', text: '💬 問 AI', title: '針對選取的文字向 AI（Gemini）提問' });
+    bAsk.addEventListener('mousedown', (e) => e.preventDefault());
+    bAsk.addEventListener('click', () => {
+      if (!pendingRange) return;
+      const info = pendingRange;
+      hideSelBar();
+      PL.askAI(info);
+    });
+    bar.appendChild(bAsk);
+
     const bCopy = PL.el('button', { text: '⧉' , title: '複製選取文字'});
     bCopy.addEventListener('mousedown', (e) => e.preventDefault());
     bCopy.addEventListener('click', async () => {
@@ -1225,9 +1236,10 @@
     // 兩個分頁：側邊翻譯（查字）／我的註解
     const head = PL.el('header');
     const tabs = PL.el('div', { class: 'pl-tabs' });
-    const tTr = PL.el('button', { class: 'pl-tab', 'data-tab': 'tr', text: '🔤 查字・翻譯', title: '側邊翻譯：查單字、翻一句話，不會動到文章' });
-    const tNotes = PL.el('button', { class: 'pl-tab', 'data-tab': 'notes', text: '📝 我的註解' });
-    tabs.append(tTr, tNotes);
+    const tTr = PL.el('button', { class: 'pl-tab', 'data-tab': 'tr', text: '🔤 查字', title: '查字・翻譯：查單字、翻一句話，不會動到文章' });
+    const tAi = PL.el('button', { class: 'pl-tab', 'data-tab': 'ai', text: '💬 問 AI', title: '針對選取的段落向 AI（Gemini）提問' });
+    const tNotes = PL.el('button', { class: 'pl-tab', 'data-tab': 'notes', text: '📝 註解', title: '我的註解' });
+    tabs.append(tTr, tAi, tNotes);
     tabs.addEventListener('click', (e) => {
       const b = e.target.closest && e.target.closest('[data-tab]');
       if (b) setSideTab(b.getAttribute('data-tab'));
@@ -1245,6 +1257,7 @@
 
     const list = PL.el('div', { class: 'pl-list' });
     const trPane = PL.el('div', { class: 'pl-trpane' });
+    const aiPane = PL.el('div', { class: 'pl-aipane' });
 
     // 左緣的寬度把手
     const grip = PL.el('div', { id: 'pl-side-grip', title: '拖曳調整註解欄寬度' });
@@ -1271,7 +1284,7 @@
       if (PL.Overlay) PL.Overlay.reproject();
     }, true);
 
-    el.append(grip, head, list, trPane);
+    el.append(grip, head, list, trPane, aiPane);
     document.documentElement.appendChild(el);
     if (PL.settings && PL.settings.sidebarWidth) {
       document.documentElement.style.setProperty('--pl-side-w', PL.settings.sidebarWidth + 'px');
@@ -1280,7 +1293,8 @@
     PL.els.sideList = list;
     PL.els.sideTr = trPane;
     if (PL.Lookup) PL.Lookup.mount(trPane);
-    setSideTab(PL.settings && PL.settings.sideTab === 'tr' && PL.Lookup ? 'tr' : 'notes');
+    if (PL.AskAI) PL.AskAI.mount(aiPane);
+    setSideTab((PL.settings && PL.settings.sideTab) || 'notes');
     return el;
   }
 
@@ -1288,7 +1302,7 @@
   PL.sideTab = () => (document.documentElement.classList.contains('pl-side-open') ? sideTab : null);
 
   function setSideTab(tab) {
-    if (tab === 'tr' && !PL.Lookup) tab = 'notes';
+    if ((tab === 'tr' && !PL.Lookup) || (tab === 'ai' && !PL.AskAI) || !/^(tr|ai|notes)$/.test(tab)) tab = 'notes';
     sideTab = tab;
     const el = PL.els.side;
     if (!el) return;
@@ -1306,6 +1320,7 @@
     const open = document.documentElement.classList.contains('pl-side-open');
     if (PL.els.sideBtn) PL.els.sideBtn.classList.toggle('pl-on', open && sideTab === 'notes');
     if (PL.els.lookupBtn) PL.els.lookupBtn.classList.toggle('pl-on', open && sideTab === 'tr');
+    if (PL.els.askBtn) PL.els.askBtn.classList.toggle('pl-on', open && sideTab === 'ai');
   }
 
   const renderSidebarSoon = PL.debounce(() => renderSidebar(), 400);
@@ -1387,9 +1402,31 @@
     paintSideButtons();
     if (next && sideTab === 'notes') renderSidebar();
     if (next && sideTab === 'tr' && PL.Lookup) PL.Lookup.focus();
+    if (next && sideTab === 'ai' && PL.AskAI) PL.AskAI.focus();
     if (PL.Sync) PL.Sync.markDirty();
     if (PL.Overlay) PL.Overlay.reproject();
     if (open !== next) globalThis.PL_saveSettings({ showSidebar: next });
+  };
+
+  /** 問 AI：打開側欄的「問 AI」分頁，把選取的文字設成要問的段落 */
+  PL.askAI = function (info) {
+    if (!PL.AskAI) return false;
+    PL.toggleSidebar(true, 'ai');
+    if (info) PL.AskAI.setContext(info);
+    return true;
+  };
+
+  /** 把選取的文字標起來，並把 text 存成它的心得（問 AI 的「存成心得」用） */
+  PL.noteFromSelection = function (info, text) {
+    try {
+      const ann = createAnnotation(info, PL.settings.defaultHighlight);
+      updateAnnotation(ann, { note: text });
+      PL.toast('已標記並存成心得');
+      return true;
+    } catch (e) {
+      PL.toast('這段選取已經變動，請重新選取後再存');
+      return false;
+    }
   };
 
   /** 側邊翻譯：打開「查字・翻譯」分頁並查這段文字 */
@@ -1425,6 +1462,8 @@
         syncSelection(info);
         // 側邊「查字・翻譯」開著：選了就在側欄查
         if (PL.Lookup && PL.Lookup.wantsSelection()) PL.Lookup.fromSelection(info.fullText || info.text);
+        // 「問 AI」開著：改成問這一段
+        if (PL.AskAI && PL.sideTab() === 'ai') PL.AskAI.fromSelection(info);
       }, 10);
     }, true);
 

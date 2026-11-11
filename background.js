@@ -18,6 +18,7 @@ const CONTENT_JS = [
   'content/geminikey.js',
   'content/textstyle.js',
   'content/lookup.js',
+  'content/askai.js',
   'content/export.js',
   'content/boot.js'
 ];
@@ -251,6 +252,10 @@ const handlers = {
   async 'openOptions'() {
     await chrome.runtime.openOptionsPage();
     return true;
+  },
+
+  async 'ai.ask'(msg) {
+    return PLRemote.ask(msg, await PL_loadSettings());
   },
 
   async 'dict.lookup'(msg) {

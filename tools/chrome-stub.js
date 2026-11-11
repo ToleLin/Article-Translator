@@ -25,6 +25,10 @@
             case 'ai.warm': throw new Error('testbed 沒有內建 AI');
             case 'ai.translate': throw new Error('testbed 沒有內建 AI');
             case 'translate.remote': return { engine: msg.engine || 'testbed', result: msg.texts.map(fakeZh) };
+            case 'ai.ask':
+              await new Promise((r) => setTimeout(r, 300));
+              return { model: 'testbed', text: '**重點**：這是測試用的假回答（第 ' + ((msg.history || []).length / 2 + 1) + ' 輪）。\n\n- 問題：' + msg.question
+                + '\n- 段落長度：' + (msg.passage || '').length + ' 字，全文 ' + (msg.doc || '').length + ' 字\n\n1. 表面電漿極化子 `SPP`\n2. 傳播常數 β = k0·√(εd·εm/(εd+εm))' };
             case 'dict.lookup': return /\s/.test(msg.text.trim())
               ? { translation: fakeZh(msg.text), phonetic: '', dict: [], defs: [], examples: [], engine: 'google' }
               : { translation: '〔查〕' + msg.text, phonetic: 'ˈtest', engine: 'google',

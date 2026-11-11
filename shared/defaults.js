@@ -23,6 +23,7 @@
     splitRatio: 0.5,                // 左欄寬度比例
     skipChinese: true,              // 已經是中文的段落不翻
     translateRefs: false,
+    askWithDoc: true,               // 問 AI 時把全文節錄一起給它當背景
     lookupOnSelect: true,           // 側邊「查字・翻譯」開著時，選字就自動查           // PDF 的參考文獻要不要翻（作者名、期刊名翻了反而錯，預設保留原文）
 
     /* --- 外觀 --- */

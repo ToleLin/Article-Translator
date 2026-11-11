@@ -325,6 +325,11 @@
     bar.appendChild(btnLook);
     PL.els.lookupBtn = btnLook;
 
+    const btnAsk = PL.el('button', { id: 'pl-askbtn', text: '問 AI', title: '問 AI：針對選取的段落向 Gemini 提問' });
+    btnAsk.addEventListener('click', () => PL.toggleSidebar(undefined, 'ai'));
+    bar.appendChild(btnAsk);
+    PL.els.askBtn = btnAsk;
+
     const btnSide = PL.el('button', { id: 'pl-sidebtn', text: '註解' });
     btnSide.addEventListener('click', () => PL.toggleSidebar(undefined, 'notes'));
     bar.appendChild(btnSide);

@@ -33,6 +33,7 @@
   };
 
   PL.refreshGeminiButton = function () {
+    if (PL.AskAI) PL.AskAI.refreshKey();          // 金鑰存好／移除後，「問 AI」的提示跟著更新
     const on = PL.geminiActive();
     document.querySelectorAll('[data-pl-gemini-btn]').forEach((b) => {
       b.classList.toggle('pl-on', on);

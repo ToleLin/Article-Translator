@@ -390,6 +390,65 @@
     return out;
   }
 
+  /* ══════════ 問 AI：針對選取的段落向 Gemini 提問（可以連續追問） ══════════
+     q = { question, passage, around, doc, title, history: [{ role: 'user'|'model', text }], lang }
+     第一則使用者訊息前面附上文獻資料（標題、選取的段落、所在段落、全文節錄），之後的追問只送問題。 */
+
+  async function ask(q, s) {
+    if (!s.geminiApiKey) throw new Error('需要 Gemini 金鑰：請按工具列的「✦ Gemini」貼上金鑰（Google AI Studio 可以免費申請）');
+    const question = String((q && q.question) || '').trim();
+    if (!question) throw new Error('請輸入問題');
+    const lang = (g.PL_LANG_LABEL && g.PL_LANG_LABEL[q.lang || s.targetLang]) || '繁體中文';
+    const model = s.geminiModel || g.PL_DEFAULTS.geminiModel;
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+      + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(s.geminiApiKey);
+
+    const sys = '你是協助研究生讀論文的助教。使用者正在讀一篇文獻，會針對其中一段提問。\n'
+      + '規則：\n'
+      + '1. 一律用' + lang + '回答；專有名詞第一次出現時附上英文原文。\n'
+      + '2. 先直接回答問題，再視需要補充；簡潔、講重點，不要開場白、不要重複題目。\n'
+      + '3. 以提供的文獻內容為依據。文獻裡沒有寫到的，可以用一般知識補充，但要說明「文中沒有提到」。不確定就說不確定，不要編造數據或引用。\n'
+      + '4. 可以用條列；數學式用一般文字寫（例如 β = k0·√(εd·εm/(εd+εm))），不要用 LaTeX。';
+
+    const cut = (t, n) => { t = String(t || '').trim(); return t.length > n ? t.slice(0, n) + '…' : t; };
+    let ctx = '';
+    if (q.title) ctx += '【文獻標題】' + cut(q.title, 300) + '\n\n';
+    if (q.passage) ctx += '【使用者選取的文字】\n' + cut(q.passage, 6000) + '\n\n';
+    if (q.around && q.around !== q.passage) ctx += '【所在段落（原文）】\n' + cut(q.around, 8000) + '\n\n';
+    if (q.doc) ctx += '【全文節錄（背景資料）】\n' + cut(q.doc, 40000) + '\n\n';
+
+    const turns = [];
+    for (const h of (q.history || []).slice(-12)) {
+      if (!h || !h.text) continue;
+      turns.push({ role: h.role === 'model' ? 'model' : 'user', parts: [{ text: cut(h.text, 6000) }] });
+    }
+    turns.push({ role: 'user', parts: [{ text: question }] });
+    // 文獻資料放在第一則使用者訊息的最前面
+    const first = turns.find((t) => t.role === 'user');
+    if (ctx) first.parts[0].text = ctx + '【問題】\n' + first.parts[0].text;
+    while (turns.length && turns[0].role !== 'user') turns.shift();     // Gemini 要求由使用者開頭
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: sys }] },
+        contents: turns,
+        generationConfig: { temperature: 0.4 }
+      })
+    });
+    if (!res.ok) throw new Error(geminiError(res.status, await res.text().catch(() => '')));
+    const data = await res.json();
+    const cand = data && data.candidates && data.candidates[0];
+    const out = cand && cand.content && cand.content.parts
+      && cand.content.parts.filter((p) => !p.thought).map((p) => p.text || '').join('').trim();
+    if (!out) {
+      const why = (data && data.promptFeedback && data.promptFeedback.blockReason) || (cand && cand.finishReason) || '';
+      throw new Error('Gemini 沒有回答' + (why ? '（' + why + '）' : '') + '，請換個問法再試');
+    }
+    return { text: out, model };
+  }
+
   /* ══════════ 查字（側邊翻譯）：Google 的字典資料 ══════════
      一次拿到：譯文、音標、各詞性的多個中文意思（附反查的英文）、英英解釋、例句。
      句子也能查（只會有譯文）。被限流時退回另一條端點，只給譯文。 */
@@ -433,5 +492,5 @@
     return { translation, phonetic: rm.src_translit || '', src: (d && d.src) || src, dict, defs, examples, engine: 'google' };
   }
 
-  g.PLRemote = { googleTranslate, edgeTranslate, geminiTranslate, geminiTest, translate, explain, lookup };
+  g.PLRemote = { googleTranslate, edgeTranslate, geminiTranslate, geminiTest, translate, explain, lookup, ask };
 })(globalThis);
