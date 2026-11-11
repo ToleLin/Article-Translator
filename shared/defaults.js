@@ -93,11 +93,18 @@
     return s;
   }
 
-  async function saveSettings(patch) {
-    const cur = await loadSettings();
-    const next = Object.assign({}, cur, patch);
-    await chrome.storage.local.set({ settings: next });
-    return next;
+  /* 存設定是「讀出來 → 合併 → 寫回去」。同一個頁面連續存兩次（例如開側欄時同時記分頁和開關）
+     要排隊一個一個來，不然第二次會拿到舊的資料、把第一次存的蓋掉 */
+  let saveChain = Promise.resolve();
+  function saveSettings(patch) {
+    const run = saveChain.then(async () => {
+      const cur = await loadSettings();
+      const next = Object.assign({}, cur, patch);
+      await chrome.storage.local.set({ settings: next });
+      return next;
+    });
+    saveChain = run.catch(() => {});
+    return run;
   }
 
   g.PL_DEFAULTS = DEFAULTS;

@@ -76,16 +76,16 @@
     });
     root.querySelector('.pl-lk-export').addEventListener('click', exportCsv);
     root.querySelector('.pl-lk-clear').addEventListener('click', () => {
-      history = history.filter((h) => h.star);
-      saveHistory();
-      renderHistory();
-      PL.toast(history.length ? '已清除（收藏的字留著）' : '已清除查詢紀錄');
+      mutate(() => { history = history.filter((h) => h.star); })
+        .then(() => PL.toast(history.length ? '已清除（收藏的字留著）' : '已清除查詢紀錄'));
     });
     loadHistory();
   }
 
   function focusInput() {
-    if (els.input) setTimeout(() => { els.input.focus(); els.input.select(); }, 30);
+    if (!els.input) return;
+    loadHistory();                    // 別的分頁可能剛查過字：打開時重新讀一次
+    setTimeout(() => { els.input.focus(); els.input.select(); }, 30);
   }
 
   /* ══════════ 查詢 ══════════ */
@@ -113,8 +113,12 @@
       try {
         let t, eng;
         if (!dir.rev && globalThis.PLTranslate) {
-          await PLTranslate.ensureSourceLang(q);
-          const res = await PLTranslate.translate([q]);
+          // 文章的原文語言還沒判斷過：只在這一次查詢用這句話猜，不要記下來（不然會影響之後整篇的翻譯）
+          const T = PLTranslate, had = T.sourceLang;
+          if (!had) T.sourceLang = (T.guessLang && T.guessLang(q)) || null;
+          let res;
+          try { res = await T.translate([q]); }
+          finally { if (!had) T.sourceLang = had; }
           t = res.result[0];
           eng = res.engine;
         } else {
@@ -149,6 +153,7 @@
       r = await run(q, dir);
     } catch (e) {
       if (my !== tok) return;
+      current = null;                 // 失敗了：再選一次同樣的字要能重查
       els.res.innerHTML = '';
       els.res.appendChild(PL.el('div', { class: 'pl-lk-err', text: '⚠ ' + (e.message || e) }));
       return;
@@ -190,7 +195,7 @@
     const star = PL.el('button', { class: 'pl-lk-ico pl-lk-star', text: '☆', title: '加入收藏' });
     const isStar = () => !!(history.find((h) => h.q.toLowerCase() === q.toLowerCase()) || {}).star;
     const paintStar = () => { const on = isStar(); star.textContent = on ? '★' : '☆'; star.classList.toggle('pl-on', on); };
-    star.addEventListener('click', () => { toggleStar(q); paintStar(); });
+    star.addEventListener('click', () => { toggleStar(q).then(paintStar); });
     head.appendChild(star);
     const copy = PL.el('button', { class: 'pl-lk-ico', text: '⧉', title: '複製譯文' });
     copy.addEventListener('click', async () => {
@@ -261,39 +266,50 @@
 
   /* ══════════ 查詢紀錄、收藏 ══════════ */
 
-  async function loadHistory() {
+  async function readStored() {
     try {
       const got = await chrome.storage.local.get(HIST_KEY);
-      history = Array.isArray(got[HIST_KEY]) ? got[HIST_KEY] : [];
-    } catch (e) { history = []; }
+      return Array.isArray(got[HIST_KEY]) ? got[HIST_KEY] : [];
+    } catch (e) { return []; }
+  }
+
+  async function loadHistory() {
+    history = await readStored();
     renderHistory();
   }
 
-  function saveHistory() {
-    try { chrome.storage.local.set({ [HIST_KEY]: history }); } catch (e) { /* ignore */ }
+  /* 每個分頁、每個視窗各有一份這個面板。要改紀錄時先重新讀一次存檔再改、再寫回去，
+     不然在這個分頁查一個字，會把另一個分頁剛加的字和星號蓋掉。排隊做，免得自己跟自己搶。 */
+  let histChain = Promise.resolve();
+  function mutate(fn) {
+    histChain = histChain.then(async () => {
+      history = await readStored();
+      fn();
+      // 超過上限：收藏的全部留著，其餘只留最新的
+      let plain = 0;
+      history = history.filter((h) => h.star || ++plain <= HIST_MAX);
+      try { await chrome.storage.local.set({ [HIST_KEY]: history }); } catch (e) { /* ignore */ }
+      renderHistory();
+    }).catch(() => {});
+    return histChain;
   }
 
   function remember(q, t) {
-    const i = history.findIndex((h) => h.q.toLowerCase() === q.toLowerCase());
-    const star = i >= 0 ? history[i].star : false;
-    if (i >= 0) history.splice(i, 1);
-    history.unshift({ q, t: String(t || '').slice(0, 300), at: Date.now(), star });
-    // 收藏的不會因為超過上限被擠掉
-    if (history.length > HIST_MAX) {
-      const keep = history.filter((h, k) => h.star || k < HIST_MAX);
-      history = keep.slice(0, HIST_MAX + 200);
-    }
-    saveHistory();
-    renderHistory();
+    return mutate(() => {
+      const i = history.findIndex((h) => h.q.toLowerCase() === q.toLowerCase());
+      const star = i >= 0 ? history[i].star : false;
+      if (i >= 0) history.splice(i, 1);
+      history.unshift({ q, t: String(t || '').slice(0, 300), at: Date.now(), star });
+    });
   }
 
   function toggleStar(q) {
-    const h = history.find((x) => x.q.toLowerCase() === q.toLowerCase());
-    if (!h) return;
-    h.star = !h.star;
-    saveHistory();
-    renderHistory();
-    PL.toast(h.star ? '已加入收藏' : '已取消收藏');
+    return mutate(() => {
+      const h = history.find((x) => x.q.toLowerCase() === q.toLowerCase());
+      if (!h) return;
+      h.star = !h.star;
+      PL.toast(h.star ? '已加入收藏' : '已取消收藏');
+    });
   }
 
   function renderHistory() {
@@ -310,7 +326,12 @@
       row.appendChild(PL.el('span', { class: 'pl-lk-hq', text: h.q }));
       row.appendChild(PL.el('span', { class: 'pl-lk-ht', text: h.t }));
       const st = PL.el('button', { class: 'pl-lk-ico', text: h.star ? '★' : '☆', title: h.star ? '取消收藏' : '加入收藏' });
-      st.addEventListener('click', (e) => { e.stopPropagation(); toggleStar(h.q); if (current && current.r && current.q.toLowerCase() === h.q.toLowerCase()) renderResult(current.q, current.dir, current.r); });
+      st.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleStar(h.q).then(() => {
+          if (current && current.r && current.q.toLowerCase() === h.q.toLowerCase()) renderResult(current.q, current.dir, current.r);
+        });
+      });
       row.appendChild(st);
       row.addEventListener('click', () => lookup(h.q));
       els.hist.appendChild(row);

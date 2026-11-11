@@ -123,7 +123,7 @@
 
     $('pl-page-total').textContent = String(doc.pdf.numPages);
     $('pl-drop').classList.add('pl-hide');
-    if (globalThis.PLDesktop && PLDesktop.docOpened) PLDesktop.docOpened();
+    if (globalThis.PLDesktop && PLDesktop.docOpened) PLDesktop.docOpened(doc.title);
 
     await extractAll();
     layoutPages();
@@ -868,7 +868,8 @@
       } else {
         setTimeout(() => {
           heads.forEach((h) => Q.queued.delete(h));
-          enqueue(heads);
+          // 還沒開始自動翻譯（只翻了使用者選的那幾段）：重試也只重試這幾段，不要因此開始翻整份
+          enqueue(heads, !Q.started);
         }, 1500 * Q.failures);        // 被限流時退避久一點
       }
     }
@@ -1233,7 +1234,8 @@
 
   const relayout = PL.debounce(() => {
     if (!doc.pdf) return;
-    const L = $('pl-left');
+    // 「僅譯文」時左欄是藏起來的：改用右欄記位置，縮放後才不會跳到別的地方
+    const L = $('pl-left').clientWidth ? $('pl-left') : $('pl-right');
     const a = zoomAnchor || (L.clientWidth ? anchorInfo(L, L.clientWidth / 2, L.clientHeight / 2) : null);
     zoomAnchor = null;
     layoutPages();
@@ -1693,6 +1695,11 @@
     if (!/\.pdf$/i.test(file.name) && file.type !== 'application/pdf') {
       PL.toast('這不是 PDF 檔');
       return;
+    }
+    // 桌面版：交給主程序開（這個分頁已經有文件的話會開成新分頁，原本那篇不會被蓋掉）
+    if (globalThis.PLDesktop && PLDesktop.openPath && PLDesktop.pathForFile) {
+      const fp = PLDesktop.pathForFile(file);
+      if (fp && await PLDesktop.openPath(fp)) return;
     }
     const buf = await file.arrayBuffer();
     // 桌面版拿得到完整路徑：註解就綁在路徑上，不同資料夾的同名檔案不會混在一起

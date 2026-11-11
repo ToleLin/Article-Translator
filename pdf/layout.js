@@ -632,24 +632,30 @@
      認法：「References」標題之後長得像引用的段落；或同一頁至少 3 條「編號＋作者＋年份」的條目。 */
 
   const REF_HEAD = /^(references?|reference list|bibliography|literature cited|works cited|cited literature|參考文獻|参考文献|引用文獻)$/i;
-  const REF_END = /^(appendix|appendices|supplementary|supporting information|acknowledg|author contributions|data availability|conflicts? of interest|competing interests|funding|附錄)/i;
+  // 參考文獻後面常見的章節（Nature 系列的 Methods 就排在 References 後面）：看到就離開參考文獻區
+  const REF_END = /^(appendix|appendices|supplementary|supporting information|acknowledg|author contributions?|author information|data availability|code availability|conflicts? of interest|competing interests|funding|methods?|materials and methods|experimental( section| details| methods)?|online content|additional information|extended data|reporting summary|ethics|abbreviations|notes?|publisher.s note|open access|rights and permissions|附錄|方法|致謝)\b/i;
   const NUM_LABEL = /^\s*[[(]?\d{1,3}[.)\]]?\s+\S/;
-  const YEAR = /(?:^|[^\d])(1[89]\d{2}|20\d{2})[a-z]?(?:[^\d]|$)/;
+  const YEAR = /(?:^|[^\d])(1[89]\d{2}|20[0-3]\d)[a-z]?(?:[^\d]|$)/;
+  // 一般句子才會出現的字：參考文獻的條目裡很少（頂多標題裡一個）
+  const PROSE = /\b(we|our|is|are|was|were|this|these|here|however|thus|therefore|which|shown|using)\b/gi;
+  const proseScore = (t) => (t.match(PROSE) || []).length;
   // Zhong, H. Z.／K. He,／et al.／Smith J,
   const AUTHOR = /\p{Lu}[\p{L}'’-]+,\s+(?:\p{Lu}\.\s?-?\s?){1,3}|(?:^|[\s,])(?:\p{Lu}\.\s?-?){1,3}\s?\p{Lu}[\p{L}'’-]+[,.]|\bet al\b|\p{Lu}[\p{L}'’-]+\s\p{Lu}{1,3},/u;
-  const looksCitation = (t) => YEAR.test(t) && AUTHOR.test(t);
+  const looksCitation = (t) => t.length <= 900 && YEAR.test(t) && AUTHOR.test(t) && proseScore(t) < 3;
   // 已經在參考文獻區裡：寫全名的格式（Jimmy Lei Ba, Jamie Ryan Kiros, and …. 2016.）也算
   const NAME_FIRST = /^\s*(?:[[(]?\d{1,3}[.)\]]?\s+)?\p{Lu}[\p{L}'’.-]*(?:\s+(?:\p{Lu}[\p{L}'’.-]*|van|von|de|der|da|di|del|la|le))*,/u;
   const NAME = "\\p{Lu}[\\p{L}'’.-]*(?:\\s+\\p{Lu}[\\p{L}'’.-]*){0,4}";
   const TWO_AUTHORS = new RegExp('^\\s*' + NAME + '\\s+(?:and|&)\\s+\\p{Lu}', 'u');          // Rie Kubota Ando and Tong Zhang.
-  const ONE_AUTHOR = new RegExp('^\\s*' + NAME + '\\.\\s+(?:\\(?(?:1[89]|20)\\d{2}|\\p{Lu})', 'u');   // Wilson L Taylor. 1953.
-  const looksCitationLoose = (t) => looksCitation(t) || (YEAR.test(t)
+  // Wilson L Taylor. 1953.（至少兩個字的人名，後面直接接年份；「Simulations. The …」不算）
+  const ONE_AUTHOR = /^\s*\p{Lu}[\p{L}'’.-]*(?:\s+\p{Lu}[\p{L}'’.-]*){1,4}\.\s+\(?(?:1[89]|20)\d{2}/u;
+  const looksCitationLoose = (t) => looksCitation(t) || (t.length <= 600 && YEAR.test(t) && proseScore(t) < 2
     && (NAME_FIRST.test(t) || NUM_LABEL.test(t) || TWO_AUTHORS.test(t) || ONE_AUTHOR.test(t)));
   // 附錄標題：「A. Object Detection Baselines」「A.1 Illustration of …」
   const APPENDIX_HEAD = /^[A-H](?:\.\d+)*\.?\s+\p{Lu}/u;
 
   function markReferences(pages) {
     let inRefs = false, lastRef = false;
+    const refH = [];                 // 已經認出來的參考文獻的字級
     for (const pg of pages) {
       const numbered = [];
       for (const b of pg.blocks) {
@@ -657,11 +663,14 @@
         if (b.skip) continue;
         const t = b.text.trim();
         const bare = t.replace(/^[\dIVX]+\.?\s+/, '').replace(/[:：]$/, '');
-        if (t.length < 40 && REF_HEAD.test(bare)) { inRefs = true; lastRef = false; continue; }
+        if (t.length < 40 && REF_HEAD.test(bare)) { inRefs = true; lastRef = false; refH.length = 0; continue; }
         if (t.length < 60 && (REF_END.test(bare) || (inRefs && APPENDIX_HEAD.test(t) && !YEAR.test(t)))) { inRefs = false; continue; }
-        if (NUM_LABEL.test(t) && looksCitation(t)) numbered.push(b);
+        // 字明顯比參考文獻大、又不像引用：參考文獻結束了，後面是別的章節
+        if (inRefs && refH.length >= 2 && b.h > median(refH) * 1.08 && !looksCitation(t)) inRefs = false;
+        if (NUM_LABEL.test(t) && looksCitation(t) && proseScore(t) < 2) numbered.push(b);
         // 小寫開頭、緊接在一條參考文獻後面：換欄／換頁接著寫的那一條的後半
         if (inRefs && (looksCitationLoose(t) || (b.prev && b.prev.ref) || (lastRef && /^[a-z(]/.test(t)))) b.ref = true;
+        if (b.ref && inRefs) refH.push(b.h);
         lastRef = !!b.ref;
       }
       if (numbered.length >= 3) numbered.forEach((b) => { b.ref = true; });
@@ -896,6 +905,6 @@
   g.PLLayout = {
     analyze, unitText, splitTranslation, joinPieces,
     // 給測試用
-    _: { normalize, buildRows, findGutters, splitRow, buildBlocks, convert, SUP, SUB, looksLikeMath, modeShare }
+    _: { normalize, buildRows, findGutters, splitRow, buildBlocks, convert, SUP, SUB, looksLikeMath, modeShare, markReferences }
   };
 })(globalThis);

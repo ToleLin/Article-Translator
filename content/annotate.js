@@ -129,6 +129,13 @@
     if (!block) { ann.orphan = true; return false; }
 
     let pos = locate(block, ann);
+    // 標在譯文上、而那一段還沒翻好：等翻好再畫。這時候去別段找會找到別處的同一個詞，
+    // 把註解永久掛到錯的段落上
+    const own = PL.blocks[ann.block];
+    if (!pos && ann.side === 'right' && own && own.state !== 'done' && own.state !== 'same' && own.state !== 'skip') {
+      ann.orphan = true;
+      return false;
+    }
     if (!pos && ann.exact && ann.exact.length >= 4) {
       /* 段落編號變了（例如 PDF 版面分析改版、重新分段）：
          原本那一段已經畫出來、卻找不到這段字，就到其他已經畫出來的段落找，找到就改掛過去 */
@@ -549,21 +556,34 @@
   const CAN_SYNC = typeof CSS !== 'undefined' && CSS.highlights && typeof Highlight !== 'undefined';
   const SEG = typeof Intl !== 'undefined' && Intl.Segmenter ? new Intl.Segmenter('zh-Hant', { granularity: 'word' }) : null;
 
-  function nonWsBefore(str, pos) {
-    let k = 0;
-    for (let i = 0; i < pos && i < str.length; i++) if (!/\s/.test(str[i])) k++;
-    return k;
-  }
-  function posOfNonWs(str, k) {
-    let n = 0;
-    for (let i = 0; i < str.length; i++) {
-      if (/\s/.test(str[i])) continue;
-      if (n === k) return i;
-      n++;
-    }
-    return str.length;
-  }
   const nonWsLen = (str) => str.replace(/\s+/g, '').length;
+
+  /**
+   * PDF 文字層的字串（a）跟整理過的原文（b）逐字對齊：空白兩邊各自跳過；
+   * a 行尾的連字號在 b 已經被接回去（diffrac-/tive → diffractive），那個「-」不佔 b 的位置。
+   * 光算「第幾個非空白字」的話，每遇到一個接回去的連字號就會差一個字。
+   */
+  function alignMap(a, b) {
+    const a2b = new Int32Array(a.length + 1), b2a = new Int32Array(b.length + 1);
+    const ws = (c) => /\s/.test(c);
+    const hy = (c) => c === '-' || c === '\u2010' || c === '\u2011' || c === '\u00ad';
+    let i = 0, j = 0;
+    while (i < a.length || j < b.length) {
+      if (i < a.length && ws(a[i])) { a2b[i] = j; i++; continue; }
+      if (j < b.length && ws(b[j])) { b2a[j] = i; j++; continue; }
+      if (i >= a.length) { b2a[j] = i; j++; continue; }
+      if (j >= b.length) { a2b[i] = j; i++; continue; }
+      if (a[i] !== b[j] && hy(a[i])) {
+        let k = i + 1;
+        while (k < a.length && ws(a[k])) k++;
+        if (k < a.length && a[k] === b[j]) { a2b[i] = j; i++; continue; }
+      }
+      a2b[i] = j; b2a[j] = i; i++; j++;
+    }
+    a2b[a.length] = b.length;
+    b2a[b.length] = a.length;
+    return { a2b, b2a };
+  }
 
   const EN_ABBR = /(?:\b(?:e\.g|i\.e|et al|etc|vs|cf|Fig|Figs|Eq|Eqs|Ref|Refs|Sec|Tab|No|Vol|approx|ca|resp|Dr|Prof|Suppl)|\b[A-Z])\.$/;
 
@@ -837,14 +857,24 @@
   }
 
   /** 整句一起翻、選的字用【】框起來，看框起來的地方翻成什麼（連前後文一起翻，用詞最接近譯文） */
-  const MARK_RE = /[【\[「〔]+\s*([^【】\[\]「」〔〕]+?)\s*[】\]」〕]+/;
+  const MARK_RE = /【\s*([^【】]+?)\s*】/;
+  const MARK_ALT = /[\[「〔『]\s*([^\[\]「」〔〕『』]+?)\s*[\]」〕』]/g;
+  /** 記號被翻譯引擎換成別種括號時：排除引用編號 [12]，剩下剛好一個才算數 */
+  function markedPart(out) {
+    const m = out.match(MARK_RE);
+    if (m) return m[1].trim();
+    const alt = [];
+    let x;
+    MARK_ALT.lastIndex = 0;
+    while ((x = MARK_ALT.exec(out))) if (!/^[\d\s,，–-]+$/.test(x[1])) alt.push(x[1].trim());
+    return alt.length === 1 ? alt[0] : null;
+  }
   async function markedTranslate(c) {
     const sen = c.selSentence, a = c.rel[0], z = c.rel[1];
     if (!sen || z <= a || sen.length > 900) return null;
     const marked = sen.slice(0, a) + '【' + sen.slice(a, z).trim() + '】' + sen.slice(z);
     const out = await phraseTranslate(marked, c.from, c.to, c.engine);
-    const m = out && out.match(MARK_RE);
-    return m ? m[1].trim() : null;
+    return out ? markedPart(out) : null;
   }
 
   /** 一個段落裡選了 [s, e)（selected 那一邊的文字位置）→ 另一邊對應的句子，以及找字需要的資料 */
@@ -857,10 +887,22 @@
     // PDF 左欄文字層的字串沒有行與行之間的空白：句子要在整理過的原文（srcText）上切，再按「非空白字元」對回去
     const src = PL.isPdf ? b.srcText : leftTxt;
     // 起點對到「第一個被選到的字」，終點對到「最後一個被選到的字的後面」（不然會多亮下一句）
-    const toSrc = (p) => (PL.isPdf ? posOfNonWs(src, nonWsBefore(leftTxt, p)) : p);
-    const toSrcEnd = (p) => (PL.isPdf ? posOfNonWs(src, Math.max(0, nonWsBefore(leftTxt, p) - 1)) + 1 : p);
-    const toLeft = (p) => (PL.isPdf ? posOfNonWs(leftTxt, nonWsBefore(src, p)) : p);
-    const toLeftEnd = (p) => (PL.isPdf ? posOfNonWs(leftTxt, Math.max(0, nonWsBefore(src, p) - 1)) + 1 : p);
+    let map = null;
+    if (PL.isPdf) {
+      if (!b._amap || b._amap.l !== leftTxt.length || b._amap.s !== src.length) {
+        b._amap = { l: leftTxt.length, s: src.length, m: alignMap(leftTxt, src) };
+      }
+      map = b._amap.m;
+    }
+    const endOf = (tbl, str, p) => {
+      let k = Math.min(p, str.length) - 1;
+      while (k >= 0 && /\s/.test(str[k])) k--;
+      return k < 0 ? 0 : tbl[k] + 1;
+    };
+    const toSrc = (p) => (map ? map.a2b[Math.min(p, leftTxt.length)] : p);
+    const toSrcEnd = (p) => (map ? endOf(map.a2b, leftTxt, p) : p);
+    const toLeft = (p) => (map ? map.b2a[Math.min(p, src.length)] : p);
+    const toLeftEnd = (p) => (map ? endOf(map.b2a, src, p) : p);
     const srcLang = (globalThis.PLTranslate && PLTranslate.sourceLang && PLTranslate.sourceLang !== 'auto')
       ? PLTranslate.sourceLang : 'en';
 
@@ -1024,7 +1066,7 @@
   }
 
   // 測試用
-  PL._sync = { findLiteral, matchCjk, matchEn, snapWords, sentenceSpans };
+  PL._sync = { findLiteral, matchCjk, matchEn, snapWords, sentenceSpans, alignMap, markedPart };
 
   /* ══════════ 翻譯選取的文字 ══════════ */
 

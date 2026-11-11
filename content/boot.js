@@ -84,6 +84,7 @@
             PL.highlightSelection(true);
           } else if (msg.command === 'translate-selection') {
             // 沒開對照也可以：直接用小視窗翻譯網頁上選取的文字
+            if (!PL.settings) PL.settings = await globalThis.PL_loadSettings();   // 還沒啟用過：先讀設定（語言、引擎、金鑰）
             PL.translateSelection();
           } else if (msg.command === 'export-pdf') {
             await PL.openExport();

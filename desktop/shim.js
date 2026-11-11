@@ -71,7 +71,9 @@
     isDesktop: true,
     pathForFile: (file) => B.pathForFile(file),
     viewerReady: () => B.viewerReady(),
-    docOpened: () => B.docOpened(),
+    docOpened: (title) => B.docOpened(title),
+    /** 交給主程序開這個檔案：這個分頁是空的就開在這裡，不然開新分頁 */
+    openPath: (filePath) => B.openPath(filePath),
     openDialog: () => B.openDialog(),
     savePdf: (opts) => B.savePdf(opts)
   };

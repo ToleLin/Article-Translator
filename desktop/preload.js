@@ -12,7 +12,8 @@ contextBridge.exposeInMainWorld('PLDesktopBridge', {
   version: () => ipcRenderer.invoke('pl:version'),
   appVersion: (() => { try { return ipcRenderer.sendSync('pl:version-sync'); } catch (e) { return '0.0.0'; } })(),
   viewerReady: () => ipcRenderer.invoke('pl:viewer-ready'),
-  docOpened: () => ipcRenderer.send('pl:doc-opened'),
+  docOpened: (title) => ipcRenderer.send('pl:doc-opened', title),
+  openPath: (filePath) => ipcRenderer.invoke('pl:open-path', filePath),
   openDialog: () => ipcRenderer.invoke('pl:open-dialog'),
   savePdf: (opts) => ipcRenderer.invoke('pl:save-pdf', opts),
   pathForFile: (file) => {

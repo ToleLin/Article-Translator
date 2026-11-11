@@ -19,6 +19,8 @@ for (const d of DIRS) fs.cpSync(path.join(ROOT, d), path.join(OUT, d), { recursi
 
 fs.mkdirSync(path.join(OUT, 'desktop'), { recursive: true });
 fs.copyFileSync(path.join(DESK, 'shim.js'), path.join(OUT, 'desktop', 'shim.js'));
+// 分頁列（視窗最上面那一條）
+for (const f of ['tabs.html', 'tabs.js']) fs.copyFileSync(path.join(DESK, f), path.join(OUT, 'desktop', f));
 
 const icon = path.join(DESK, 'build', 'icon.png');
 if (fs.existsSync(icon)) fs.copyFileSync(icon, path.join(OUT, 'icons', 'icon512.png'));

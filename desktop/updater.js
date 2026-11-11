@@ -8,7 +8,7 @@
  */
 'use strict';
 
-const { app, dialog, shell, BrowserWindow } = require('electron');
+const { app, dialog, shell, BaseWindow } = require('electron');
 
 const PORTABLE = !!process.env.PORTABLE_EXECUTABLE_DIR;
 const RENOTIFY = 3 * 24 * 3600 * 1000;      // 免安裝版：同一個新版本 3 天提醒一次
@@ -22,7 +22,7 @@ let queue = Promise.resolve(); // 對話框一個一個跳，不疊在一起
 let downloaded = null;        // 已下載、等著安裝的版本
 const state = { latest: null, error: null, checkedAt: 0, downloading: false };
 
-const winOf = () => BrowserWindow.getFocusedWindow() || BrowserWindow.getAllWindows()[0] || undefined;
+const winOf = () => BaseWindow.getFocusedWindow() || BaseWindow.getAllWindows()[0] || undefined;
 
 function friendly(e) {
   const m = String((e && e.message) || e || '');
