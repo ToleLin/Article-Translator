@@ -1,0 +1,177 @@
+# 建置 PaperLens 並發佈更新包
+#
+# 每次推上來都會建置（在該次執行的「Artifacts」可以下載）：
+#   - PaperLens-Windows：安裝版、免安裝版 .exe
+#   - PaperLens-macOS：Apple Silicon（M 系列）的 .dmg
+#   - PaperLens-Extension：Chrome 擴充功能的更新包 .zip
+#
+# 版本號（manifest.json）是新的 → 自動發佈 vX.Y.Z 到 GitHub Releases：
+#   使用者從 Releases 頁面下載；桌面安裝版會自己從這裡下載新版、自動更新。
+#   發新版的方法：node tools/version.js patch → 在 CHANGELOG.md 寫這一版改了什麼 → commit、push。
+#
+# 也可以在 Actions 頁面手動按「Run workflow」。
+name: 建置與發佈
+
+on:
+  push:
+    branches: ['**']
+    tags: ['v*']
+    paths:
+      - 'desktop/**'
+      - 'pdf/**'
+      - 'shared/**'
+      - 'content/**'
+      - 'export/**'
+      - 'options/**'
+      - 'popup/**'
+      - 'vendor/**'
+      - 'icons/**'
+      - 'background.js'
+      - 'manifest.json'
+      - 'CHANGELOG.md'
+      - 'tools/version.js'
+      - 'tools/pack-extension.js'
+      - 'tools/release-notes.js'
+      - '.github/workflows/build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: build-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows 版與擴充功能
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 版本號
+        shell: bash
+        run: node tools/version.js --check
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: 安裝建置工具
+        working-directory: desktop
+        run: npm ci
+
+      - name: 打包 Windows 安裝版與免安裝版
+        working-directory: desktop
+        run: npm run dist
+
+      - name: 打包擴充功能更新包
+        run: node tools/pack-extension.js
+
+      - name: 上傳 Windows 版
+        uses: actions/upload-artifact@v7
+        with:
+          name: PaperLens-Windows
+          # latest.yml 和 .blockmap 是給桌面版自動更新用的，使用者不用下載
+          path: |
+            desktop/dist/*.exe
+            desktop/dist/*.exe.blockmap
+            desktop/dist/latest.yml
+          if-no-files-found: error
+
+      - name: 上傳擴充功能更新包
+        uses: actions/upload-artifact@v7
+        with:
+          name: PaperLens-Extension
+          path: dist/PaperLens-Extension-*.zip
+          if-no-files-found: error
+
+  macos:
+    name: macOS 版（Apple Silicon）
+    runs-on: macos-latest          # GitHub 的 macos-latest 就是 M 系列（arm64）
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: 安裝建置工具
+        working-directory: desktop
+        run: npm ci
+
+      - name: 打包 macOS 版（.dmg）
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false'     # 沒有 Apple 開發者憑證，只做本機（ad-hoc）簽章
+        run: npm run dist:mac
+
+      - name: 檢查打包結果
+        working-directory: desktop
+        run: |
+          APP="dist/mac-arm64/PaperLens.app"
+          file "$APP/Contents/MacOS/PaperLens" | grep -q arm64
+          codesign --verify --deep --strict "$APP"
+          ls -lh dist/*.dmg
+
+      - name: 上傳 macOS 版
+        uses: actions/upload-artifact@v7
+        with:
+          name: PaperLens-macOS
+          path: desktop/dist/*.dmg
+          if-no-files-found: error
+
+  release:
+    name: 發佈到 Releases
+    needs: [windows, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: 版本號
+        id: v
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          V=$(node tools/version.js --check)
+          echo "version=$V" >> "$GITHUB_OUTPUT"
+          if gh release view "v$V" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            echo "release=false" >> "$GITHUB_OUTPUT"
+            echo "::notice::v$V 已經發佈過，這次只建置不發佈。要發新版請先改版本號：node tools/version.js patch"
+          else
+            echo "release=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::v$V 還沒發佈，會發佈到 Releases"
+          fi
+
+      - name: 取回建置好的檔案
+        if: steps.v.outputs.release == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          path: out
+          merge-multiple: true
+
+      - name: 產生發佈說明
+        if: steps.v.outputs.release == 'true'
+        run: node tools/release-notes.js "${{ steps.v.outputs.version }}" > release-notes.md
+
+      - name: 發佈到 Releases
+        if: steps.v.outputs.release == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ steps.v.outputs.version }}
+          name: PaperLens ${{ steps.v.outputs.version }}
+          target_commitish: ${{ github.sha }}
+          body_path: release-notes.md
+          make_latest: true
+          fail_on_unmatched_files: true
+          files: |
+            out/PaperLens-Setup-${{ steps.v.outputs.version }}.exe
+            out/PaperLens-Setup-${{ steps.v.outputs.version }}.exe.blockmap
+            out/PaperLens-Portable-${{ steps.v.outputs.version }}.exe
+            out/latest.yml
+            out/PaperLens-mac-arm64-${{ steps.v.outputs.version }}.dmg
+            out/PaperLens-Extension-${{ steps.v.outputs.version }}.zip

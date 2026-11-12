@@ -12,25 +12,31 @@
     engineOrder: ['chrome', 'edge', 'google'], // 依序嘗試，前面失敗自動退到下一個
     autoFallback: true,
     geminiApiKey: '',               // 選用，留空代表不啟用 gemini 引擎
-    geminiModel: 'gemini-2.0-flash',
+    geminiModel: 'gemini-3.6-flash', // gemini-2.0-flash 已在 2026-06-01 停用，官方建議改用 3.6-flash
 
     /* --- 行為 --- */
     autoTranslate: true,            // 開啟對照後自動開始翻譯
     autoPdf: false,                 // 開啟 PDF 網址時自動換成 PaperLens 的 PDF 檢視器
-    lazyTranslate: true,            // 只翻視窗附近的段落，捲到哪翻到哪
+    lazyTranslate: true,            // 先翻視窗附近的段落，捲到哪翻到哪
+    bgTranslate: true,              // 看得到的翻完之後，在背景把整篇補完（PDF）
     syncScroll: true,
     splitRatio: 0.5,                // 左欄寬度比例
     skipChinese: true,              // 已經是中文的段落不翻
+    translateRefs: false,
+    askWithDoc: true,               // 問 AI 時把全文節錄一起給它當背景
+    lookupOnSelect: true,           // 側邊「查字・翻譯」開著時，選字就自動查           // PDF 的參考文獻要不要翻（作者名、期刊名翻了反而錯，預設保留原文）
 
     /* --- 外觀 --- */
     transFont: '"Noto Serif TC", "Source Han Serif TC", "PingFang TC", "Microsoft JhengHei", serif',
     transFontScale: 1.0,
+    transColor: 'auto',             // 譯文字色：auto = 跟原文一樣；或 #rrggbb
     transLineHeight: 1.9,
     dimOriginal: false,             // 左欄稍微變淡，讓視線集中在右欄
 
     /* --- 註解 --- */
     defaultHighlight: 'yellow',
     showSidebar: false,
+    sideTab: 'notes',               // 側欄上次開的分頁：notes（註解）／tr（查字・翻譯）
     sidebarWidth: 320,
 
     /* --- 匯出 --- */
@@ -77,16 +83,28 @@
     return t[code] || code;
   }
 
+  /* 已經被 Google 停用的模型：使用者以前存過的設定自動換成目前的預設 */
+  const RETIRED_GEMINI = /^gemini-(1\.0|1\.5|2\.0)(-|$)|^gemini-pro$/;
+
   async function loadSettings() {
     const got = await chrome.storage.local.get('settings');
-    return Object.assign({}, DEFAULTS, got.settings || {});
+    const s = Object.assign({}, DEFAULTS, got.settings || {});
+    if (!s.geminiModel || RETIRED_GEMINI.test(s.geminiModel)) s.geminiModel = DEFAULTS.geminiModel;
+    return s;
   }
 
-  async function saveSettings(patch) {
-    const cur = await loadSettings();
-    const next = Object.assign({}, cur, patch);
-    await chrome.storage.local.set({ settings: next });
-    return next;
+  /* 存設定是「讀出來 → 合併 → 寫回去」。同一個頁面連續存兩次（例如開側欄時同時記分頁和開關）
+     要排隊一個一個來，不然第二次會拿到舊的資料、把第一次存的蓋掉 */
+  let saveChain = Promise.resolve();
+  function saveSettings(patch) {
+    const run = saveChain.then(async () => {
+      const cur = await loadSettings();
+      const next = Object.assign({}, cur, patch);
+      await chrome.storage.local.set({ settings: next });
+      return next;
+    });
+    saveChain = run.catch(() => {});
+    return run;
   }
 
   g.PL_DEFAULTS = DEFAULTS;

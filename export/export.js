@@ -78,6 +78,19 @@
     svg.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;overflow:visible;pointer-events:none';
 
     for (const it of items) {
+      if (it.kind === 'text') {
+        // 文字方塊：位置是相對於段落方框的比例，字級是相對於段落寬度
+        if (!(it.text || '').trim() || !it.pos) continue;
+        col.style.containerType = 'inline-size';
+        const t = document.createElement('div');
+        t.textContent = it.text;
+        t.style.cssText = 'position:absolute;white-space:pre-wrap;font-weight:600;line-height:1.35;pointer-events:none;'
+          + 'text-shadow:0 0 2px #fff,0 0 2px #fff;font-family:system-ui,"Microsoft JhengHei",sans-serif;'
+          + 'left:' + (it.pos[0] * 100) + '%;top:' + (it.pos[1] * 100) + '%;color:' + (it.color || '#ef4444')
+          + ';font-size:' + Math.max(0.5, (it.fs || 0.03) * 100) + 'cqw';
+        col.appendChild(t);
+        continue;
+      }
       const pts = it.pts || [];
       if (pts.length < 2) continue;
       const a = pts[0], b = pts[pts.length - 1];
@@ -282,6 +295,29 @@
       if ($('inline').checked) inlineImages();
     });
     $('print').addEventListener('click', () => window.print());
+
+    // 桌面版：不用經過列印視窗，直接存成 PDF 檔
+    if (globalThis.PLDesktop && PLDesktop.savePdf) {
+      const b = document.createElement('button');
+      b.className = 'primary';
+      b.textContent = '直接存成 PDF 檔';
+      b.addEventListener('click', async () => {
+        b.disabled = true;
+        status('產生 PDF 中…');
+        try {
+          const r = await PLDesktop.savePdf({ title: payload.title || 'PaperLens' });
+          status(r && r.filePath ? '已存到 ' + r.filePath : '已取消');
+        } catch (e) {
+          status('存檔失敗：' + (e.message || e));
+        }
+        b.disabled = false;
+      });
+      $('print').before(b);
+      $('print').textContent = '列印…';
+      $('print').classList.remove('primary');
+      const hint = document.getElementById('hint');
+      if (hint) hint.textContent = '按「直接存成 PDF 檔」就會存下左右對照的 PDF（含螢光筆底色）；要印到紙上再按「列印…」。';
+    }
 
     if ($('inline').checked) await inlineImages();
     else status('就緒');

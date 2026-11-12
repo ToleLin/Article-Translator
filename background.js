@@ -4,6 +4,7 @@
 import './shared/defaults.js';
 import './shared/localai.js';
 import './shared/remote-engines.js';
+import './shared/update.js';
 
 const CONTENT_JS = [
   'shared/defaults.js',
@@ -14,6 +15,10 @@ const CONTENT_JS = [
   'content/translate.js',
   'content/annotate.js',
   'content/overlay.js',
+  'content/geminikey.js',
+  'content/textstyle.js',
+  'content/lookup.js',
+  'content/askai.js',
   'content/export.js',
   'content/boot.js'
 ];
@@ -83,69 +88,14 @@ async function openInViewer(tabId, url, newTab) {
    遠端翻譯引擎（都在 background 呼叫，避開網頁的 CORS 限制）
    ════════════════════════════════════════════════════════════ */
 
-/* ---- 分派 + 自動備援 ---- */
+/* ---- 分派 + 自動備援、AI 解釋：實作在 shared/remote-engines.js（桌面版也用同一份） ---- */
 
-async function remoteTranslate({ engine, texts, sourceLang, targetLang, settings }) {
-  const s = settings || await PL_loadSettings();
-  const order = engine ? [engine] : (s.engineOrder || PL_DEFAULTS.engineOrder);
-  const tried = [];
-  let lastErr = null;
-
-  for (const eng of order) {
-    if (eng === 'chrome') continue;                 // 內建 AI 由呼叫端自己處理
-    if (eng === 'gemini' && !s.geminiApiKey) continue;
-    const tgt = PL_mapLang(eng, targetLang || s.targetLang);
-    const src = (sourceLang && sourceLang !== 'auto') ? PL_mapLang(eng, sourceLang) : 'auto';
-    try {
-      let result;
-      if (eng === 'google') result = await PLRemote.googleTranslate(texts, src, tgt);
-      else if (eng === 'edge') result = await PLRemote.edgeTranslate(texts, src, tgt);
-      else if (eng === 'gemini') result = await PLRemote.geminiTranslate(texts, src, tgt, s.geminiApiKey, s.geminiModel);
-      else continue;
-
-      if (result && result.some((x) => x != null)) return { engine: eng, result };
-      lastErr = new Error(eng + ' 沒有回傳任何譯文');
-    } catch (e) {
-      lastErr = e;
-      tried.push(eng + '：' + (e && e.message || e));
-      if (!s.autoFallback && engine) break;
-    }
-  }
-  throw new Error(tried.length ? tried.join(' ／ ') : (lastErr ? lastErr.message : '沒有可用的翻譯引擎'));
+async function remoteTranslate(msg) {
+  return PLRemote.translate(msg, msg.settings || await PL_loadSettings());
 }
 
-/* ---- 用遠端模型做「AI 解釋」（Chrome 內建不可用時的備援） ---- */
-
 async function remoteExplain(text, context, settings) {
-  const s = settings || await PL_loadSettings();
-  if (!s.geminiApiKey) {
-    throw new Error('這台 Chrome 的內建語言模型無法使用，且尚未設定 Gemini 金鑰。'
-      + '可到設定頁貼上 Google AI Studio 的免費金鑰，或改用「翻譯本段」了解內容。');
-  }
-  const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
-    + encodeURIComponent(s.geminiModel || 'gemini-2.0-flash') + ':generateContent?key=' + encodeURIComponent(s.geminiApiKey);
-
-  let prompt = '你是協助研究生讀論文的助教。用繁體中文說明下面這段文獻在做什麼。\n'
-    + '固定三行：「重點：」一句話講主張或動作；「細節：」最多兩句補方法/數據/條件；'
-    + '「名詞：」列出專有名詞用「英文(中文)」並各給一句解釋，沒有就寫「無」。\n'
-    + '不要開場白，不要重複原文，不要編造。\n\n【片段】\n' + text.slice(0, 6000);
-  if (context && context.title) prompt = '【文獻標題】' + context.title + '\n' + prompt;
-
-  const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ role: 'user', parts: [{ text: prompt }] }],
-      generationConfig: { temperature: 0.3 }
-    })
-  });
-  if (!res.ok) throw new Error('Gemini 回應 ' + res.status);
-  const data = await res.json();
-  const out = data && data.candidates && data.candidates[0]
-    && data.candidates[0].content && data.candidates[0].content.parts
-    && data.candidates[0].content.parts.map((p) => p.text || '').join('');
-  if (!out) throw new Error('Gemini 沒有回傳內容');
-  return out;
+  return PLRemote.explain(text, context, settings || await PL_loadSettings());
 }
 
 /* ---- 圖片轉 data URL（匯出 PDF 時內嵌，避免防盜連導致列印缺圖） ---- */
@@ -180,7 +130,7 @@ const handlers = {
     const s = await PL_loadSettings();
     const src = msg.sourceLang && msg.sourceLang !== 'auto' ? PL_mapLang('chrome', msg.sourceLang) : 'en';
     const tgt = msg.targetCode || PL_mapLang('chrome', msg.targetLang || s.targetLang);
-    const result = await PLLocalAI.translateMany(msg.texts, src, tgt, { concurrency: 3 });
+    const result = await PLLocalAI.translateMany(msg.texts, src, tgt, { concurrency: 3, chunk: 350 });
     return { engine: 'chrome', result };
   },
 
@@ -226,6 +176,13 @@ const handlers = {
 
   async 'translate.remote'(msg) {
     return remoteTranslate(msg);
+  },
+
+  // 「✦ Gemini」視窗的「測試金鑰」：金鑰還沒儲存，所以直接帶在訊息裡
+  async 'gemini.test'(msg) {
+    const s = await PL_loadSettings();
+    if (!msg.key) throw new Error('請先貼上金鑰');
+    return PLRemote.geminiTest(msg.key, msg.model, PL_mapLang('gemini', msg.targetLang || s.targetLang));
   },
 
   async 'settings.get'() {
@@ -295,8 +252,88 @@ const handlers = {
   async 'openOptions'() {
     await chrome.runtime.openOptionsPage();
     return true;
+  },
+
+  async 'ai.ask'(msg) {
+    return PLRemote.ask(msg, await PL_loadSettings());
+  },
+
+  async 'dict.lookup'(msg) {
+    const s = await PL_loadSettings();
+    const tgt = PL_mapLang('google', msg.targetLang || s.targetLang);
+    const src = msg.sourceLang && msg.sourceLang !== 'auto' ? PL_mapLang('google', msg.sourceLang) : 'auto';
+    return PLRemote.lookup(msg.text, src, tgt);
+  },
+
+  async 'update.check'(msg) {
+    return checkUpdate(!!(msg && msg.force));
+  },
+
+  async 'update.openExtensions'() {
+    await chrome.tabs.create({ url: 'chrome://extensions/?id=' + chrome.runtime.id });
+    return true;
   }
 };
+
+/* ════════════════════════════════════════════════════════════
+   新版本提醒：每 12 小時問一次 GitHub Releases，有新版就在工具列圖示上標「新」
+   （擴充功能是「載入未封裝項目」裝的，Chrome 不會自己更新，只能提醒使用者下載更新包）
+   ════════════════════════════════════════════════════════════ */
+
+const UPDATE_EVERY = 12 * 3600 * 1000;
+
+function updateState(info) {
+  const cur = chrome.runtime.getManifest().version;
+  return Object.assign({}, info, {
+    current: cur,
+    newer: !!(info && info.latest) && PLUpdate.compare(info.latest, cur) > 0
+  });
+}
+
+async function showUpdateBadge(state) {
+  try {
+    await chrome.action.setBadgeText({ text: state.newer ? '新' : '' });
+    if (state.newer) {
+      await chrome.action.setBadgeBackgroundColor({ color: '#dc2626' });
+      await chrome.action.setTitle({ title: 'PaperLens 有新版本 v' + state.latest + '（目前 v' + state.current + '）' });
+    } else {
+      await chrome.action.setTitle({ title: 'PaperLens 對照閱讀 (Alt+Shift+T)' });
+    }
+  } catch (e) { /* ignore */ }
+}
+
+let updateRun = null;
+async function checkUpdate(force) {
+  if (updateRun) return updateRun;
+  updateRun = (async () => {
+    const { updateInfo } = await chrome.storage.local.get('updateInfo');
+    const old = updateInfo || null;
+    if (!force && old && Date.now() - old.checkedAt < UPDATE_EVERY) {
+      const st = updateState(old);
+      await showUpdateBadge(st);
+      return st;
+    }
+    let info;
+    try {
+      const r = await PLUpdate.latest();
+      info = {
+        checkedAt: Date.now(), latest: r.version, url: r.url,
+        highlights: PLUpdate.highlights(r.notes, 5), assets: r.assets, error: null
+      };
+    } catch (e) {
+      // 查不到（離線、專案是私人的…）就沿用上次的結果，只記下錯誤
+      info = Object.assign({}, old || {}, { checkedAt: Date.now(), error: String(e.message || e) });
+    }
+    await chrome.storage.local.set({ updateInfo: info });
+    const st = updateState(info);
+    await showUpdateBadge(st);
+    return st;
+  })().finally(() => { updateRun = null; });
+  return updateRun;
+}
+
+// 背景程式每次被叫醒都看一下（沒到時間只讀儲存的結果、不會連網）
+checkUpdate(false).catch(() => {});
 
 chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   const fn = handlers[msg && msg.type];
@@ -333,6 +370,11 @@ chrome.runtime.onInstalled.addListener(() => {
       contexts: ['page', 'selection']
     });
     chrome.contextMenus.create({
+      id: 'pl-translate',
+      title: 'PaperLens：翻譯選取的文字',
+      contexts: ['selection']
+    });
+    chrome.contextMenus.create({
       id: 'pl-highlight',
       title: 'PaperLens：螢光標記這段',
       contexts: ['selection']
@@ -355,6 +397,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   if (!tab) return;
   try {
     if (info.menuItemId === 'pl-toggle') await handlers['toggle']({ tabId: tab.id });
+    if (info.menuItemId === 'pl-translate') await handlers['command']({ tabId: tab.id, command: 'translate-selection' });
     if (info.menuItemId === 'pl-highlight') await handlers['command']({ tabId: tab.id, command: 'highlight-selection' });
     if (info.menuItemId === 'pl-explain') await handlers['command']({ tabId: tab.id, command: 'explain-selection' });
     if (info.menuItemId === 'pl-pdf') {

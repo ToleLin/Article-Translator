@@ -5,9 +5,52 @@ Chrome 擴充功能。左邊原文、右邊繁體中文，**圖片、表格、�
 
 **網頁文獻和 PDF 檔都支援**。PDF 用內建的 pdf.js 渲染，左右兩欄畫的是**同一張頁面**，右欄只把文字就地換成中文 —— 圖、公式、排版天生 1:1。
 
+有兩種用法，功能相同、程式碼共用：
+
+| | Chrome 擴充功能 | 桌面版（Windows .exe／macOS .dmg） |
+|---|---|---|
+| 適合 | 在瀏覽器裡讀期刊網頁、PDF 連結 | 直接開電腦裡的 PDF，像一般 PDF 閱讀器 |
+| 安裝 | 下面「安裝」三步驟 | 下載安裝檔，見[桌面版](#桌面版windowsmacos) |
+| 翻譯引擎 | Chrome 內建 AI、Edge／Bing、Google、Gemini | Google、Edge／Bing、Gemini（沒有 Chrome 內建 AI） |
+
 完整操作說明看 [使用說明書.md](使用說明書.md)。
 
 不需要註冊、不需要付費、沒有額度限制。
+
+---
+
+## 最近改了什麼
+
+每一版的完整內容見 [CHANGELOG.md](CHANGELOG.md)。0.2.1 加了**自動更新**（見下面的[更新](#更新)），以下是 0.2.x 的主要改動：
+
+**PDF 版面**
+- 修正雙欄論文被當成單欄、左右兩欄的句子被拼成同一句送翻的問題（欄距窄的期刊，例如 *Light: Science & Applications* 最明顯）——這是之前譯文「完全看不懂」的主因
+- 圖片、外框線、表格線不會再被白色方塊蓋掉：只蓋每一行原文的字，顏色從頁面取樣（藍底白字、圖上的標籤都對得上）
+- 中文字級跟原文看起來一樣大、全頁一致；段落頭尾對齊原文
+- 跨欄、跨頁沒寫完的同一句話會串起來一起翻，不再翻成兩個半句
+- 上下標（引用編號、Si₃N₄、TE₀）保留；斷字還原；頁首頁尾、公式不翻
+
+**翻譯**
+- 更快：同時送 3 個請求、每段翻好就先顯示，看得到的頁面先翻，之後在背景把整篇補完
+- 更完整：沒翻到、只翻一半的段落會自動換引擎重翻；Chrome 內建翻譯改成切句送，減少漏句
+- 譯文工具：游標停在譯文上點 ⋯，可以看原文、重翻、**並排比較各引擎**再選一個用
+- **翻譯選取的文字**：選字後按「🌐 翻譯」，小視窗顯示譯文、右欄這幾段也一起翻；可以關掉自動翻譯、只翻自己選的段落
+- **選取時兩邊對應**：選英文，右邊對應的中文會亮起來（反過來也一樣）；只選幾個字時標出對應的那幾個字（選「1968」就標「1968」）
+- **📄 原文**：在中文那邊選字，按「原文」看對應的英文原句
+- **💬 問 AI（側欄）**：選一段文字直接問 Gemini（白話解釋、重點整理、為什麼這樣做…），可以連續追問，回答可存成心得
+- **桌面版分頁**：像瀏覽器一樣一個視窗開多篇文章、點分頁切換，下次啟動自動開回上次的文件
+- **查字・翻譯（側欄）**：只查一個單字或翻一句話，不動到文章；字典式顯示（音標、發音、各詞性意思、英英解釋），查過的字可收藏、匯出成生詞表
+- **Aa 譯文外觀**：工具列可以直接換字體、字色、字級
+- PDF 的參考文獻預設保留原文；修正背景翻好的頁面、縮放後的頁面字疊在一起
+- **縮放**：`Ctrl + 滾輪`／觸控板捏合以游標為中心縮放，放大後可左右捲動、兩邊同步
+- **「✦ Gemini」按鈕**：工具列上獨立的入口，貼上 Gemini API 金鑰 → 測試 → 儲存，就改用 Gemini 翻譯（可一鍵用 Gemini 重翻整份）
+- Gemini 預設模型改為 `gemini-3.6-flash`（`gemini-2.0-flash` 已於 2026-06-01 停用，舊設定會自動換掉）
+
+**標註工具（重新設計）**
+- 橫向工具列、每個工具都有文字：畫筆、螢光筆、箭頭、方框、圈選、**文字**、**便利貼**、橡皮擦
+- **復原／重做**（Ctrl+Z／Ctrl+Shift+Z），擦掉、清除都能復原
+- 便利貼真的可以貼了（舊版點了沒反應），可拖曳、縮放、換色、收合成小圖示，也會列在「註解」側欄
+- 橡皮擦可以擦線條、圖形、文字、便利貼，連選字螢光筆也擦得掉
 
 ---
 
@@ -28,9 +71,94 @@ Chrome 擴充功能。左邊原文、右邊繁體中文，**圖片、表格、�
 
 Chrome 每次啟動會跳一個「停用開發人員模式擴充功能」的提醒泡泡，按 **取消** 就好，它不會真的停用，也不影響功能。
 
+## 更新
+
+新版本發佈在 GitHub 專案的 **Releases** 頁面，每一版都有這幾個檔案：
+
+| 檔案 | 給誰用 |
+|---|---|
+| `PaperLens-Setup-x.y.z.exe` | Windows 安裝版（建議）|
+| `PaperLens-Portable-x.y.z.exe` | Windows 免安裝版 |
+| `PaperLens-mac-arm64-x.y.z.dmg` | macOS 版（Apple Silicon，M 系列）|
+| `PaperLens-Extension-x.y.z.zip` | Chrome 擴充功能的更新包 |
+
+**Windows 安裝版：自動更新。** 程式開著時會自己檢查、在背景下載新版，下載好問你要不要立刻重新啟動；選「稍後」就在下次關閉時自動安裝。也可以按「說明 → 檢查更新…」。
+（0.2.0 以前的版本沒有這個功能，請手動下載 `PaperLens-Setup` 覆蓋安裝一次，之後就會自己更新。）
+
+**Windows 免安裝版：** 有新版時會跳出提醒，按「下載新版」，把舊的 .exe 換成新的就好。
+
+**macOS 版：** 有新版時會跳出提醒，按「下載新版」，打開 .dmg 把 PaperLens 拖進「應用程式」取代舊的。
+
+**Chrome 擴充功能：** 有新版時工具列圖示會出現紅色的「新」字，點開會看到更新步驟：
+1. 按「① 下載更新包」，下載 `PaperLens-Extension-x.y.z.zip` 並解壓縮
+2. 把裡面的檔案全部複製，貼到原本的 PaperLens 資料夾，選「取代」——**資料夾位置不要改**
+3. 按「③ 開啟擴充功能頁」，在 PaperLens 上按「重新載入」↻
+
+（Chrome 不允許「載入未封裝項目」的擴充功能自己換掉檔案，所以只能提醒、由你覆蓋。）
+
+三種版本的註解、標註、翻譯快取、設定、Gemini 金鑰都存在自己電腦上，**更新不會不見**。
+
+> **專案目前是「私人」的**：只有登入、有權限的 GitHub 帳號看得到 Releases，自動更新與新版提醒也查不到新版本（會顯示「找不到公開的發佈版本」）。要讓其他人下載、自動更新，請把專案設成公開：GitHub 專案頁 → **Settings** → 最下面 **Danger Zone** →「Change visibility」→ **Public**。
+
+**發新版（給維護的人）：**
+```
+node tools/version.js patch      # 版本號加一，例如 0.2.1 → 0.2.2
+```
+在 `CHANGELOG.md` 最上面寫這一版改了什麼（`### 這一版更新` 底下的條列會顯示在程式內的更新提醒），commit、push。GitHub 會自動建置並發佈到 Releases，已安裝的桌面版就會收到更新。版本號沒改的話只會建置、不會發佈。
+
 ### 換一台電腦
 
 跑 `powershell -ExecutionPolicy Bypass -File tools\build.ps1` 會在 `dist\` 產生一個 ZIP，拿到另一台電腦解壓縮後一樣用「載入未封裝項目」即可。註解與設定是各機器獨立的，可以用設定頁的「匯出全部註解」搬過去。
+
+---
+
+## 桌面版（Windows／macOS）
+
+跟擴充功能是同一套 PDF 對照檢視器，包成獨立程式：雙擊 PDF 就用 PaperLens 開、不用開瀏覽器。
+
+### 下載
+
+到專案的 **Releases** 頁面，下載最新版的：
+- `PaperLens-Setup-x.y.z.exe`：安裝版（可選安裝位置、建立桌面捷徑、可設為 PDF 的開啟方式；**之後會自動更新**）
+- `PaperLens-Portable-x.y.z.exe`：免安裝版，放隨身碟也能用（有新版時會提醒）
+
+開發中的版本：每次推上程式，**Actions** 頁面的「建置與發佈」都會建置一次，在該次執行最下面的 **Artifacts** 可以下載 `PaperLens-Windows`、`PaperLens-macOS`、`PaperLens-Extension`。
+
+> 安裝檔沒有數位簽章，第一次執行 Windows 可能跳出「Windows 已保護您的電腦」。按 **其他資訊** → **仍要執行** 即可。
+
+### 用法
+
+- 開檔：選單「檔案 → 開啟 PDF…」（Ctrl+O）、把 PDF 拖進視窗、或在檔案總管對 PDF 按右鍵 →「開啟檔案 → PaperLens」
+- 其餘操作（翻譯、標註、便利貼、註解、匯出）跟擴充功能完全一樣
+- 匯出頁多了「**直接存成 PDF 檔**」，不用經過列印視窗
+- 註解、標註、翻譯快取、設定都存在 `%APPDATA%\PaperLens\paperlens-data.json`（「說明 → 關於」會顯示完整路徑）
+- 桌面版沒有 Chrome 內建 AI（那是 Chrome 瀏覽器才有的），翻譯走 Google、Edge／Bing，填了金鑰就多一個 Gemini
+
+### macOS 版（Apple Silicon：M1／M2／M3／M4…）
+
+1. 到 **Releases** 下載 `PaperLens-mac-arm64-x.y.z.dmg`，打開後把 PaperLens 拖進「應用程式」
+2. 第一次開啟如果出現「無法打開」或「已損毀，應該丟到垃圾桶」：程式沒有 Apple 開發者簽章，macOS 會擋下從網路下載的程式。打開「終端機」貼上這一行、按 Enter，再開一次就可以了：
+   ```
+   xattr -cr /Applications/PaperLens.app
+   ```
+   （或是到「系統設定 → 隱私權與安全性」最下面按「強制打開」）
+
+用法跟 Windows 版一樣，快速鍵的 Ctrl 換成 ⌘（⌘O 開檔、⌘T 翻譯全文、⌘W 關閉分頁…）；在 Finder 對 PDF 按右鍵 →「打開檔案的應用程式 → PaperLens」，或把 PDF 拖到 Dock 的圖示上都可以開。資料存在 `~/Library/Application Support/PaperLens/paperlens-data.json`。
+macOS 版不會自動更新（那需要 Apple 簽章），有新版時會跳提醒。Intel 的 Mac 目前沒有提供。
+
+### 自己建置
+
+需要 Node.js 20 以上：
+
+```
+cd desktop
+npm install
+npm start          # 直接執行
+npm run dist       # 在 desktop\dist\ 產生 Setup 與 Portable 兩個 .exe（請在 Windows 上執行）
+npm run dist:mac   # 在 desktop/dist/ 產生 Apple Silicon 的 .dmg（請在 Mac 上執行）
+```
+
+`npm start`／`npm run dist` 會先跑 `scripts/prepare.js`，把擴充功能的網頁檔案（`pdf/`、`shared/`、`content/`…）複製到 `desktop/app/`，所以改擴充功能的程式就等於改桌面版。
 
 ---
 
@@ -88,9 +216,23 @@ Chrome 每次啟動會跳一個「停用開發人員模式擴充功能」的提�
 
 ---
 
+## 哪個翻譯引擎比較準？
+
+同一段話在不同引擎的品質差很多，尤其是專有名詞。在 PDF 檢視器裡游標停在任一段譯文上、點右上角的 **⋯** →「**比較各引擎**」，就能把這一段同時丟給每個引擎、並排比較，選一個「採用」（會記進快取，下次直接用）。
+
+大致的經驗（以這次測試的光學論文為例）：
+- **Chrome 內建 AI**：免費、離線、沒有額度，一般句子大致正確，但專有名詞常直譯（metasurface→「元表面」、meta-diatom→「元矽藻」、nonlocal→「非本地」），長句偶爾重複或漏半句。0.2.0 已改成切句送，漏句會少很多
+- **Google／微軟**：學術句子通順、名詞較準，是一般建議的主力；免費端點同一個網路大量使用時會暫時限流，限流時會自動換下一個
+- **Gemini（自備免費金鑰）**：專有名詞與學術語氣最好，適合重要的論文
+
+有 Gemini 金鑰的話，直接點工具列的「**✦ Gemini**」貼上就能用（桌面版也可以按 `Ctrl+G`）。
+引擎順序在設定頁用 ▲▼ 調整，或在工具列的引擎選單直接指定。
+
+---
+
 ## 資料存在哪
 
-全部在本機 `chrome.storage.local`：翻譯快取、螢光筆與心得、設定、Gemini 金鑰。沒有任何伺服器、沒有帳號。
+全部在本機 `chrome.storage.local`（桌面版是使用者資料夾的一個 JSON 檔）：翻譯快取、螢光筆與心得、手寫標註、便利貼、設定、Gemini 金鑰。沒有任何伺服器、沒有帳號。
 
 設定頁可以**匯出全部註解成 JSON**（建議偶爾備份）以及匯入。同一篇文獻的註解用去掉追蹤參數後的網址當索引，所以從不同來源連過去也認得出來。
 
@@ -122,12 +264,21 @@ content/translate.js   排隊、批次送翻、引擎備援、回填
 content/annotate.js    螢光筆、心得、AI 解釋、側欄
 content/export.js      收集左右對照內容
 content/boot.js        入口與訊息處理
+content/overlay.js     手寫標註、文字方塊、便利貼、復原／重做（網頁與 PDF 共用）
+pdf/layout.js          PDF 版面分析：欄、行、段落、上下標、頁首頁尾、跨欄接續（純計算，可在 Node 測）
+pdf/pdfview.js         PDF 對照檢視器：渲染、就地覆蓋譯文、翻譯排程、段落工具、匯出
+shared/remote-engines.js  Google／微軟／Gemini 引擎與分派（擴充功能 background 與桌面版共用）
 export/                PDF 匯出頁
 options/ popup/        設定頁與彈出視窗
-tools/make-icons.js    產生圖示（node tools/make-icons.js）
+desktop/               桌面版（Electron，Windows 與 macOS）：main.js 主程序、shim.js 模擬 chrome.* API
+.github/workflows/build.yml    自動建置 Windows .exe、macOS .dmg、擴充功能更新包，並發佈到 Releases
+tools/make-icons.js    產生圖示（node tools/make-icons.js，含桌面版 512px 圖示）
 tools/devserver.js     開發用靜態伺服器
 tools/testbed.html     離線測試台：用假的 chrome API 把 content script 跑在一篇假論文上
 ```
+
+PDF 檢視器也可以在測試台跑（不用裝擴充功能）：
+<http://localhost:5177/pdf/pdfview.html?testbed=1&file=/tools/test-paper.pdf>
 
 ### 測試台
 

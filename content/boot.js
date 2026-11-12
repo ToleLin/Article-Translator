@@ -82,6 +82,10 @@
           } else if (msg.command === 'explain-selection') {
             if (!PL.active) await PL.activate();
             PL.highlightSelection(true);
+          } else if (msg.command === 'translate-selection') {
+            // 沒開對照也可以：直接用小視窗翻譯網頁上選取的文字
+            if (!PL.settings) PL.settings = await globalThis.PL_loadSettings();   // 還沒啟用過：先讀設定（語言、引擎、金鑰）
+            PL.translateSelection();
           } else if (msg.command === 'export-pdf') {
             await PL.openExport();
           } else if (msg.command === 'translate-all') {
@@ -89,7 +93,13 @@
             PL.translateAll();
           } else if (msg.command === 'sidebar') {
             if (!PL.active) await PL.activate();
-            PL.toggleSidebar();
+            PL.toggleSidebar(undefined, 'notes');
+          } else if (msg.command === 'ask-ai') {
+            if (!PL.active) await PL.activate();
+            PL.toggleSidebar(undefined, 'ai');
+          } else if (msg.command === 'lookup') {
+            if (!PL.active) await PL.activate();
+            PL.toggleSidebar(undefined, 'tr');
           } else if (msg.command === 'retry') {
             PL.retryFailed();
           }

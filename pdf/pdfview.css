@@ -53,46 +53,119 @@ html { --pl-page-bg: var(--pl-panel); }
 .pdf-textlayer ::selection { background: rgba(79, 70, 229, .3); }
 .pdf-textlayer mark.pl-hl { color: transparent !important; }
 
-/* ══════════ 右欄：就地覆蓋的譯文方塊 ══════════ */
+/* ══════════ 右欄：就地覆蓋的譯文方塊 ══════════
+   .pl-tr      整段的範圍（定位用，本身透明）
+   .pl-trbg    每一行原文各蓋一塊同色小方塊 —— 只蓋字，不蓋圖、不蓋框線
+   .pl-trtx    譯文 */
 
 .pdf-trlayer { position: absolute; inset: 0; }
 
 .pl-tr {
   position: absolute;
   box-sizing: border-box;
-  overflow: hidden;
-  padding: 0 1px;
   font-family: var(--pl-trans-font, "Noto Serif TC", "PingFang TC", "Microsoft JhengHei", serif);
-  line-height: 1.28;
-  letter-spacing: .1px;
+  border-radius: 1px;
+}
+.pl-tr > .pl-trbg { position: absolute; inset: 0; pointer-events: none; }
+.pl-tr > .pl-trbg > i { position: absolute; display: block; }
+.pl-tr > .pl-trtx {
+  position: relative;
   text-align: justify;
-  word-break: break-word;
-  border-radius: 2px;
+  text-align-last: left;
+  letter-spacing: 0;
+  word-break: normal;
+  overflow-wrap: anywhere;
+  line-break: strict;
+  font-kerning: normal;
 }
 
-/* 還沒翻到的方塊不要蓋住原文，讓使用者先看得到內容 */
-.pl-tr:not([data-pl-done]) { background: transparent !important; }
-.pl-tr[data-pl-state="pending"] { display: none; }
+/* 使用者在「Aa」選了字色：只套在淺色底的段落 */
+html[data-pl-color] .pl-tr.pl-light { color: var(--pl-trans-color) !important; }
+
+/* 還沒翻好之前完全不蓋原文，讓使用者先看得到內容 */
+.pl-tr:not([data-pl-done]) > .pl-trbg,
+.pl-tr:not([data-pl-done]) > .pl-trtx { display: none; }
+.pl-tr[data-pl-state="pending"],
+.pl-tr[data-pl-state="same"] { pointer-events: none; }
 .pl-tr[data-pl-state="working"] {
-  display: block;
-  background: linear-gradient(90deg, transparent, rgba(79, 70, 229, .18), transparent) !important;
+  background: linear-gradient(90deg, transparent, rgba(79, 70, 229, .16), transparent);
   background-size: 220% 100%;
   animation: pl-shimmer 1.1s linear infinite;
+  pointer-events: none;
 }
 .pl-tr[data-pl-state="error"] {
-  display: block;
   outline: 1px dashed rgba(220, 80, 80, .75);
   outline-offset: 1px;
 }
 
 /* 譯文真的比原文長、方塊撐開時標一下，讓人知道是內容變長不是版面壞掉 */
-.pl-tr.pl-overflow { box-shadow: -2px 0 0 0 rgba(79, 70, 229, .6); }
+.pl-tr.pl-overflow { box-shadow: -2px 0 0 0 rgba(79, 70, 229, .6); z-index: 2; }
 
 .pl-tr.pl-para-hit,
 .pdf-textlayer .pl-para.pl-para-hit span {
   outline: 2px solid var(--pl-accent);
   outline-offset: 1px;
 }
+
+/* 放大之後頁面比欄寬還寬：左右也要能捲動（共用樣式預設是 overflow-x: hidden） */
+html.pl-active #pl-left.pl-pane,
+html.pl-active #pl-right.pl-pane { overflow-x: auto !important; }
+
+/* 段落工具按鈕 */
+#pl-blockbtn {
+  position: fixed; z-index: 2147483620;
+  width: 22px; height: 22px; padding: 0;
+  display: none; align-items: center; justify-content: center;
+  border: 1px solid var(--pl-line); border-radius: 50%;
+  background: var(--pl-bg); color: var(--pl-accent);
+  font: 700 13px/1 system-ui, sans-serif; cursor: pointer;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .18);
+}
+#pl-blockbtn.pl-show { display: flex; }
+#pl-blockbtn:hover { background: var(--pl-accent); color: #fff; }
+
+/* 段落面板：原文、目前譯文、各引擎比較 */
+#pl-cmp {
+  position: fixed; z-index: 2147483630;
+  right: 18px; top: calc(var(--pl-bar-h) + 14px);
+  width: min(520px, calc(100vw - 36px)); max-height: calc(100vh - var(--pl-bar-h) - 32px);
+  display: none; flex-direction: column; gap: 8px;
+  padding: 12px 14px; overflow: auto;
+  background: var(--pl-bg); color: var(--pl-fg);
+  border: 1px solid var(--pl-line); border-radius: 12px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, .25);
+  font: 13px/1.6 system-ui, "Microsoft JhengHei", sans-serif;
+}
+#pl-cmp.pl-show { display: flex; }
+#pl-cmp header { display: flex; align-items: center; gap: 8px; }
+#pl-cmp header .pl-spacer { flex: 1; }
+#pl-cmp .pl-x { border: 0; background: transparent; color: var(--pl-muted); cursor: pointer; font-size: 15px; }
+#pl-cmp .pl-tag { font-size: 11.5px; color: var(--pl-muted); }
+#pl-cmp .pl-src {
+  max-height: 150px; overflow: auto; padding: 7px 9px;
+  background: var(--pl-panel); border-radius: 8px; font-size: 12.5px;
+  font-family: Georgia, "Times New Roman", serif;
+}
+#pl-cmp .pl-now { padding: 7px 9px; border-left: 3px solid var(--pl-accent); background: var(--pl-panel); border-radius: 0 8px 8px 0; }
+#pl-cmp .pl-txt { white-space: pre-wrap; }
+#pl-cmp .pl-row { display: flex; gap: 6px; flex-wrap: wrap; }
+#pl-cmp button:not(.pl-x) {
+  font: inherit; cursor: pointer; padding: 4px 10px;
+  border: 1px solid var(--pl-line); border-radius: 8px;
+  background: var(--pl-bg); color: var(--pl-fg);
+}
+#pl-cmp button:not(.pl-x):hover { border-color: var(--pl-accent); color: var(--pl-accent); }
+#pl-cmp button.pl-primary,
+#pl-cmp button.pl-primary:hover { background: var(--pl-accent); border-color: var(--pl-accent); color: #fff; }
+#pl-cmp button.pl-primary:hover { filter: brightness(1.12); }
+#pl-cmp button[disabled] { opacity: .5; cursor: default; }
+#pl-cmp .pl-list { display: flex; flex-direction: column; gap: 8px; }
+#pl-cmp .pl-item {
+  display: flex; flex-direction: column; gap: 4px; padding: 8px 10px;
+  border: 1px solid var(--pl-line); border-radius: 9px;
+}
+#pl-cmp .pl-item button { align-self: flex-start; }
+#pl-cmp .pl-item.pl-bad .pl-txt { color: var(--pl-muted); font-size: 12px; }
 
 /* ══════════ 工具列補充 ══════════ */
 
@@ -101,8 +174,13 @@ html { --pl-page-bg: var(--pl-panel); }
 #pl-bar #pl-zoom-label { min-width: 40px; text-align: center; font-size: 12px; color: var(--pl-muted); }
 #pl-bar .pl-pageno { font-size: 12px; color: var(--pl-muted); white-space: nowrap; }
 
+/* 工具列變窄時先收掉次要的東西；縮放按鈕一直留著 */
+#pl-bar { overflow-x: auto; scrollbar-width: none; }
+#pl-bar::-webkit-scrollbar { display: none; }
+#pl-bar .pl-status { max-width: 24vw; overflow: hidden; text-overflow: ellipsis; }
+@media (max-width: 1500px) { #pl-bar .pl-brand { display: none; } }
+@media (max-width: 1380px) { #pl-bar .pl-prog { display: none; } }
 @media (max-width: 1240px) { #pl-bar .pl-pageno { display: none; } }
-@media (max-width: 1080px) { #pl-bar .pl-zoom { display: none; } }
 
 /* ══════════ 開檔畫面 ══════════ */
 

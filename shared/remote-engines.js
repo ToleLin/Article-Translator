@@ -168,7 +168,7 @@
   }
 
   function bingTranslate(texts, src, tgt) {
-    return batched(texts, { maxItems: 6, maxChars: 2500, one: (t) => bingOnce(t, src, tgt) });
+    return batched(texts, { maxItems: 8, maxChars: 3000, concurrency: 2, one: (t) => bingOnce(t, src, tgt) });
   }
 
   async function edgeTranslate(texts, src, tgt) {
@@ -185,10 +185,33 @@
 
   /* ══════════ Gemini（選用，使用者自備 AI Studio 免費金鑰） ══════════ */
 
+  /** Gemini 的錯誤翻成看得懂的中文（金鑰貼錯、沒權限、模型名稱錯、額度用完） */
+  function geminiError(status, body) {
+    let detail = '';
+    try { detail = (JSON.parse(body).error || {}).message || ''; } catch (e) { detail = String(body || '').slice(0, 160); }
+    if (/API key not valid|API_KEY_INVALID|API key expired/i.test(body || '')) {
+      return 'Gemini 金鑰無效或已過期：請確認有完整複製（通常是 AIza 開頭、約 39 個字）';
+    }
+    if (status === 403) return 'Gemini 拒絕存取（403）：這把金鑰沒有權限，或這個專案沒有啟用 Gemini API';
+    if (status === 404) return 'Gemini 找不到這個模型（404）：請在「✦ Gemini」裡換一個模型';
+    if (status === 429) return 'Gemini 免費額度用完或請求太頻繁（429）：稍等一下再試，或換一個模型';
+    if (status >= 500) return 'Gemini 伺服器暫時有問題（' + status + '）：稍後再試';
+    return 'Gemini 回應 ' + status + (detail ? '：' + detail.slice(0, 160) : '');
+  }
+
+  /** 「✦ Gemini」視窗的「測試金鑰」：用這把金鑰實際翻一句 */
+  async function geminiTest(apiKey, model, tgt) {
+    const t0 = Date.now();
+    const out = await geminiTranslate(['The metasurface routes light of different colors to different positions on the chip.'],
+      'en', tgt, apiKey, model);
+    if (!out || !out[0]) throw new Error('Gemini 沒有回傳譯文');
+    return { ms: Date.now() - t0, sample: out[0], model: model || g.PL_DEFAULTS.geminiModel };
+  }
+
   async function geminiTranslate(texts, src, tgt, apiKey, model) {
     if (!apiKey) throw new Error('尚未在設定頁填入 Gemini API 金鑰');
     const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
-      + encodeURIComponent(model || 'gemini-2.0-flash') + ':generateContent?key=' + encodeURIComponent(apiKey);
+      + encodeURIComponent(model || g.PL_DEFAULTS.geminiModel) + ':generateContent?key=' + encodeURIComponent(apiKey);
 
     const out = new Array(texts.length);
     for (let i = 0; i < texts.length;) {
@@ -201,8 +224,10 @@
       }
 
       const instruction =
-        '你是學術文獻翻譯員。把 JSON 陣列中每個字串翻成' + tgt + '，保留學術語氣與專有名詞慣用譯法。\n'
-        + '規則：(1) 只輸出 JSON 陣列，長度與輸入完全相同；(2) 不要加說明、不要加 markdown 圍欄。\n\n'
+        '你是學術文獻翻譯員。把 JSON 陣列中每個字串完整翻成' + tgt + '，不可漏句、不可摘要。\n'
+        + '規則：(1) 保留學術語氣，專有名詞用該領域慣用譯法；縮寫（如 q-BIC、EUE、SEM、FDTD）保留原文；'
+        + '(2) 上下標字元（¹²³、₀₁₂）、數字、單位、引用編號照原樣保留在對應位置；'
+        + '(3) 只輸出 JSON 陣列，長度與輸入完全相同；(4) 不要加說明、不要加 markdown 圍欄。\n\n'
         + JSON.stringify(group.map((x) => x.text));
 
       const res = await fetch(url, {
@@ -214,8 +239,8 @@
         })
       });
       if (!res.ok) {
-        const msg = await res.text().catch(() => '');
-        throw new Error('Gemini 回應 ' + res.status + ' ' + msg.slice(0, 180));
+        const body = await res.text().catch(() => '');
+        throw new Error(geminiError(res.status, body));
       }
       const data = await res.json();
       const raw = data && data.candidates && data.candidates[0]
@@ -235,13 +260,29 @@
 
   /* ══════════ 共用的分批邏輯 ══════════ */
 
+  /** 同時最多跑 n 個 */
+  async function parallel(items, n, fn) {
+    let cursor = 0;
+    const worker = async () => {
+      while (cursor < items.length) {
+        const k = cursor++;
+        await fn(items[k], k);
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(n, items.length) }, worker));
+  }
+
   /**
-   * 把多段合併成一次請求（換行分隔），回來再拆開；
-   * 拆不對就退回逐段送，確保不會張冠李戴。
+   * 把多段合併成一次請求（換行分隔），回來再拆開。
+   *
+   * - 拆出來的段數對不上（引擎把兩行併成一行之類）→ 這一組改成逐段送，但三段同時送，不要一段等一段
+   * - 請求本身失敗（429、401、網路斷線）→ 直接往上丟，讓呼叫端換下一個引擎；
+   *   舊版會對同一個已經壞掉的引擎再逐段重試一輪，白白多等好幾秒
    */
   async function batched(texts, opt) {
-    const out = new Array(texts.length);
+    const out = new Array(texts.length).fill(null);
     const SEP = '\n';
+    const groups = [];
     let i = 0;
 
     while (i < texts.length) {
@@ -257,35 +298,199 @@
         if (group.length === 1 && group[0].text.includes(SEP)) break;
       }
       if (!group.length) { group.push({ idx: i, text: texts[i] }); i++; }
-
-      if (group.length === 1) {
-        out[group[0].idx] = await opt.one(group[0].text);
-        continue;
-      }
-
-      let parts = null;
-      try {
-        const r = await opt.one(group.map((x) => x.text).join(SEP));
-        const split = r.split(/\r?\n/);
-        if (split.length === group.length) parts = split;
-      } catch (e) {
-        if (opt.abortOnBatchError && opt.abortOnBatchError(e)) throw e;
-      }
-
-      if (parts) {
-        group.forEach((x, k) => { out[x.idx] = parts[k]; });
-      } else {
-        for (const x of group) {
-          try { out[x.idx] = await opt.one(x.text); }
-          catch (e) {
-            if (opt.abortOnBatchError && opt.abortOnBatchError(e)) throw e;
-            out[x.idx] = null;
-          }
-        }
-      }
+      groups.push(group);
     }
+
+    let lastErr = null, okCount = 0;
+    await parallel(groups, opt.concurrency || 2, async (group) => {
+      if (group.length === 1) {
+        try { out[group[0].idx] = await opt.one(group[0].text); okCount++; }
+        catch (e) { lastErr = e; if (opt.abortOnBatchError && opt.abortOnBatchError(e)) throw e; }
+        return;
+      }
+      const r = await opt.one(group.map((x) => x.text).join(SEP));     // 失敗就整個往上丟
+      okCount++;
+      const split = String(r).split(/\r?\n/);
+      if (split.length === group.length) {
+        group.forEach((x, k) => { out[x.idx] = split[k]; });
+        return;
+      }
+      await parallel(group, 3, async (x) => {
+        try { out[x.idx] = await opt.one(x.text); }
+        catch (e) { lastErr = e; if (opt.abortOnBatchError && opt.abortOnBatchError(e)) throw e; }
+      });
+    });
+    if (!okCount && lastErr) throw lastErr;
     return out;
   }
 
-  g.PLRemote = { googleTranslate, edgeTranslate, geminiTranslate };
+  /* ══════════ 分派（擴充功能的 background 與桌面版的主程序共用） ══════════ */
+
+  /**
+   * msg = { engine, texts, sourceLang, targetLang }；engine 留空就依設定的順序備援。
+   * s = 設定（PL_DEFAULTS 合併使用者設定）
+   */
+  async function translate(msg, s) {
+    const order = msg.engine ? [msg.engine] : (s.engineOrder || g.PL_DEFAULTS.engineOrder);
+    const tried = [];
+    let lastErr = null;
+
+    for (const eng of order) {
+      if (eng === 'chrome') continue;                 // 內建 AI 由呼叫端自己處理
+      if (eng === 'gemini' && !s.geminiApiKey) continue;
+      const tgt = g.PL_mapLang(eng, msg.targetLang || s.targetLang);
+      const src = (msg.sourceLang && msg.sourceLang !== 'auto') ? g.PL_mapLang(eng, msg.sourceLang) : 'auto';
+      try {
+        let result;
+        if (eng === 'google') result = await googleTranslate(msg.texts, src, tgt);
+        else if (eng === 'edge') result = await edgeTranslate(msg.texts, src, tgt);
+        else if (eng === 'gemini') result = await geminiTranslate(msg.texts, src, tgt, s.geminiApiKey, s.geminiModel);
+        else continue;
+
+        if (result && result.some((x) => x != null)) return { engine: eng, result };
+        lastErr = new Error(eng + ' 沒有回傳任何譯文');
+      } catch (e) {
+        lastErr = e;
+        tried.push(eng + '：' + (e && e.message || e));
+        if (!s.autoFallback && msg.engine) break;
+      }
+    }
+    throw new Error(tried.length ? tried.join(' ／ ') : (lastErr ? lastErr.message : '沒有可用的翻譯引擎'));
+  }
+
+  /** 用 Gemini 做「AI 解釋」 */
+  async function explain(text, context, s) {
+    if (!s.geminiApiKey) {
+      throw new Error('這台電腦的內建語言模型無法使用，且尚未設定 Gemini 金鑰。'
+        + '可到設定頁貼上 Google AI Studio 的免費金鑰，或改用「翻譯本段」了解內容。');
+    }
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+      + encodeURIComponent(s.geminiModel || g.PL_DEFAULTS.geminiModel) + ':generateContent?key=' + encodeURIComponent(s.geminiApiKey);
+
+    let prompt = '你是協助研究生讀論文的助教。用繁體中文說明下面這段文獻在做什麼。\n'
+      + '固定三行：「重點：」一句話講主張或動作；「細節：」最多兩句補方法/數據/條件；'
+      + '「名詞：」列出專有名詞用「英文(中文)」並各給一句解釋，沒有就寫「無」。\n'
+      + '不要開場白，不要重複原文，不要編造。\n\n【片段】\n' + text.slice(0, 6000);
+    if (context && context.title) prompt = '【文獻標題】' + context.title + '\n' + prompt;
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3 }
+      })
+    });
+    if (!res.ok) throw new Error(geminiError(res.status, await res.text().catch(() => '')));
+    const data = await res.json();
+    const out = data && data.candidates && data.candidates[0]
+      && data.candidates[0].content && data.candidates[0].content.parts
+      && data.candidates[0].content.parts.map((p) => p.text || '').join('');
+    if (!out) throw new Error('Gemini 沒有回傳內容');
+    return out;
+  }
+
+  /* ══════════ 問 AI：針對選取的段落向 Gemini 提問（可以連續追問） ══════════
+     q = { question, passage, around, doc, title, history: [{ role: 'user'|'model', text }], lang }
+     第一則使用者訊息前面附上文獻資料（標題、選取的段落、所在段落、全文節錄），之後的追問只送問題。 */
+
+  async function ask(q, s) {
+    if (!s.geminiApiKey) throw new Error('需要 Gemini 金鑰：請按工具列的「✦ Gemini」貼上金鑰（Google AI Studio 可以免費申請）');
+    const question = String((q && q.question) || '').trim();
+    if (!question) throw new Error('請輸入問題');
+    const lang = (g.PL_LANG_LABEL && g.PL_LANG_LABEL[q.lang || s.targetLang]) || '繁體中文';
+    const model = s.geminiModel || g.PL_DEFAULTS.geminiModel;
+    const url = 'https://generativelanguage.googleapis.com/v1beta/models/'
+      + encodeURIComponent(model) + ':generateContent?key=' + encodeURIComponent(s.geminiApiKey);
+
+    const sys = '你是協助研究生讀論文的助教。使用者正在讀一篇文獻，會針對其中一段提問。\n'
+      + '規則：\n'
+      + '1. 一律用' + lang + '回答；專有名詞第一次出現時附上英文原文。\n'
+      + '2. 先直接回答問題，再視需要補充；簡潔、講重點，不要開場白、不要重複題目。\n'
+      + '3. 以提供的文獻內容為依據。文獻裡沒有寫到的，可以用一般知識補充，但要說明「文中沒有提到」。不確定就說不確定，不要編造數據或引用。\n'
+      + '4. 可以用條列；數學式用一般文字寫（例如 β = k0·√(εd·εm/(εd+εm))），不要用 LaTeX。';
+
+    const cut = (t, n) => { t = String(t || '').trim(); return t.length > n ? t.slice(0, n) + '…' : t; };
+    let ctx = '';
+    if (q.title) ctx += '【文獻標題】' + cut(q.title, 300) + '\n\n';
+    if (q.passage) ctx += '【使用者選取的文字】\n' + cut(q.passage, 6000) + '\n\n';
+    if (q.around && q.around !== q.passage) ctx += '【所在段落（原文）】\n' + cut(q.around, 8000) + '\n\n';
+    if (q.doc) ctx += '【全文節錄（背景資料）】\n' + cut(q.doc, 40000) + '\n\n';
+
+    const turns = [];
+    for (const h of (q.history || []).slice(-12)) {
+      if (!h || !h.text) continue;
+      turns.push({ role: h.role === 'model' ? 'model' : 'user', parts: [{ text: cut(h.text, 6000) }] });
+    }
+    turns.push({ role: 'user', parts: [{ text: question }] });
+    // 文獻資料放在第一則使用者訊息的最前面
+    const first = turns.find((t) => t.role === 'user');
+    if (ctx) first.parts[0].text = ctx + '【問題】\n' + first.parts[0].text;
+    while (turns.length && turns[0].role !== 'user') turns.shift();     // Gemini 要求由使用者開頭
+
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        systemInstruction: { parts: [{ text: sys }] },
+        contents: turns,
+        generationConfig: { temperature: 0.4 }
+      })
+    });
+    if (!res.ok) throw new Error(geminiError(res.status, await res.text().catch(() => '')));
+    const data = await res.json();
+    const cand = data && data.candidates && data.candidates[0];
+    const out = cand && cand.content && cand.content.parts
+      && cand.content.parts.filter((p) => !p.thought).map((p) => p.text || '').join('').trim();
+    if (!out) {
+      const why = (data && data.promptFeedback && data.promptFeedback.blockReason) || (cand && cand.finishReason) || '';
+      throw new Error('Gemini 沒有回答' + (why ? '（' + why + '）' : '') + '，請換個問法再試');
+    }
+    return { text: out, model };
+  }
+
+  /* ══════════ 查字（側邊翻譯）：Google 的字典資料 ══════════
+     一次拿到：譯文、音標、各詞性的多個中文意思（附反查的英文）、英英解釋、例句。
+     句子也能查（只會有譯文）。被限流時退回另一條端點，只給譯文。 */
+
+  const stripTags = (s) => String(s || '').replace(/<[^>]+>/g, '');
+
+  async function lookup(text, src, tgt) {
+    const q = String(text || '').trim();
+    if (!q) throw new Error('請輸入要查的字');
+    await pace('google', 300);
+    const params = new URLSearchParams({ client: 'gtx', dj: '1', sl: src || 'auto', tl: tgt, hl: 'zh-TW', q });
+    let d;
+    try {
+      const res = await fetch('https://translate.googleapis.com/translate_a/single?' + params
+        + '&dt=t&dt=bd&dt=rm&dt=md&dt=ex', { headers: { Accept: 'application/json' } });
+      if (res.status === 429) { const e = new Error('Google 暫時限流，請稍後再試'); e.rateLimited = true; throw e; }
+      if (!res.ok) throw new Error('Google 查詢回應 ' + res.status);
+      d = await res.json();
+    } catch (e) {
+      // 字典端點不通：至少給譯文
+      const t = await googleDictOnce(q, src, tgt);
+      return { translation: t, phonetic: '', src: src, dict: [], defs: [], examples: [], engine: 'google' };
+    }
+    const sentences = (d && d.sentences) || [];
+    const translation = sentences.map((x) => x.trans || '').join('').trim();
+    const rm = sentences.find((x) => x.src_translit) || {};
+    const dict = ((d && d.dict) || []).map((e) => {
+      const terms = (e.entry || []).map((x, k) => ({
+        word: x.word || '', back: (x.reverse_translation || []).slice(0, 4), k
+      })).filter((x) => x.word);
+      // Google 的順序常把罕用的單字（筴、猷）排在前面：主要譯文最前、兩個字以上的詞次之，其餘照原順序
+      const rank = (x) => (x.word === translation ? 0 : x.word.length < 2 ? 2 : 1);
+      terms.sort((a, b) => (rank(a) - rank(b)) || (a.k - b.k));
+      return { pos: e.pos || '', terms: terms.slice(0, 8).map((x) => ({ word: x.word, back: x.back })) };
+    }).filter((e) => e.terms.length);
+    const defs = ((d && d.definitions) || []).map((e) => ({
+      pos: e.pos || '',
+      items: (e.entry || []).slice(0, 3).map((x) => ({ gloss: x.gloss || '', example: stripTags(x.example) }))
+    })).filter((e) => e.items.length);
+    const examples = ((d && d.examples && d.examples.example) || []).slice(0, 3).map((x) => stripTags(x.text));
+    return { translation, phonetic: rm.src_translit || '', src: (d && d.src) || src, dict, defs, examples, engine: 'google' };
+  }
+
+  g.PLRemote = { googleTranslate, edgeTranslate, geminiTranslate, geminiTest, translate, explain, lookup, ask };
 })(globalThis);

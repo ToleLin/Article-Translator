@@ -1,0 +1,111 @@
+{
+  "name": "paperlens-desktop",
+  "productName": "PaperLens",
+  "version": "0.2.5",
+  "description": "PaperLens 文獻對照閱讀器 — 桌面版（左原文、右繁中，PDF 版面原樣保留）",
+  "author": "PaperLens",
+  "repository": "https://github.com/ToleLin/Article-Translator",
+  "private": true,
+  "main": "main.js",
+  "scripts": {
+    "prepare-app": "node scripts/prepare.js",
+    "start": "node scripts/prepare.js && electron .",
+    "dist": "node scripts/prepare.js && electron-builder --win --x64 --publish never",
+    "dist:mac": "node scripts/prepare.js && electron-builder --mac --arm64 --publish never",
+    "dist:dir": "node scripts/prepare.js && electron-builder --dir --publish never"
+  },
+  "devDependencies": {
+    "electron": "44.10.1",
+    "electron-builder": "26.18.0"
+  },
+  "build": {
+    "appId": "tw.paperlens.desktop",
+    "productName": "PaperLens",
+    "copyright": "PaperLens",
+    "files": [
+      "main.js",
+      "preload.js",
+      "updater.js",
+      "tabs-preload.js",
+      "package.json",
+      "app/**/*"
+    ],
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "ToleLin",
+        "repo": "Article-Translator",
+        "releaseType": "release"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.png",
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        },
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "PaperLens",
+      "artifactName": "PaperLens-Setup-${version}.exe"
+    },
+    "portable": {
+      "artifactName": "PaperLens-Portable-${version}.exe"
+    },
+    "fileAssociations": [
+      {
+        "ext": "pdf",
+        "name": "PDF",
+        "description": "PDF 文件",
+        "role": "Viewer"
+      }
+    ],
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "artifactName": "PaperLens-mac-arm64-${version}.${ext}",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "title": "PaperLens ${version}"
+    },
+    "linux": {
+      "target": [
+        "dir"
+      ],
+      "icon": "build/icon.png"
+    }
+  },
+  "dependencies": {
+    "electron-updater": "6.8.11"
+  }
+}

@@ -10,7 +10,7 @@
 
   <header>
     <h1>PaperLens 設定</h1>
-    <p class="sub">文獻對照閱讀器 · <span id="ver"></span></p>
+    <p class="sub">文獻對照閱讀器 · <span id="ver"></span> · <a href="#" id="upd-check">檢查更新</a> <span id="upd-msg"></span></p>
   </header>
 
   <section>
@@ -46,10 +46,14 @@
 
     <label class="chk"><input type="checkbox" id="autoFallback"> 某個引擎失敗時自動換下一個</label>
     <label class="chk"><input type="checkbox" id="skipChinese"> 已經是中文的段落就不翻</label>
+    <label class="chk"><input type="checkbox" id="translateRefs"> PDF 的參考文獻也要翻譯</label>
+    <p class="hint">預設保留原文：作者名、期刊名翻了反而查不到，而且中文常常塞不下、跟下一條疊在一起。改了之後重新開啟 PDF 生效。</p>
 
     <div class="field">
       <label for="geminiApiKey">Gemini API 金鑰（選用）</label>
       <input type="password" id="geminiApiKey" placeholder="貼上 Google AI Studio 的免費金鑰，留空代表不用">
+      <div class="actions"><button id="testGemini" type="button">測試金鑰</button><span id="geminiResult" class="result"></span></div>
+      <p class="hint">也可以直接在閱讀畫面工具列的「✦ Gemini」按鈕貼上金鑰，一鍵改用 Gemini 翻譯。</p>
       <p class="hint">
         到 <a href="https://aistudio.google.com/apikey" target="_blank" rel="noreferrer">aistudio.google.com/apikey</a>
         可以免費申請（有免費額度）。填了之後翻譯品質與 AI 解釋會明顯更好；金鑰只存在這台電腦，不會傳給我們。
@@ -58,7 +62,8 @@
 
     <div class="field">
       <label for="geminiModel">Gemini 模型</label>
-      <input type="text" id="geminiModel" placeholder="gemini-2.0-flash">
+      <input type="text" id="geminiModel" placeholder="gemini-3.6-flash">
+      <p class="hint">gemini-2.0-flash 已於 2026-06-01 停用；舊設定會自動改用 gemini-3.6-flash。</p>
     </div>
 
     <div class="actions">
@@ -70,7 +75,8 @@
   <section>
     <h2>閱讀行為</h2>
     <label class="chk"><input type="checkbox" id="autoTranslate"> 開啟對照後自動開始翻譯</label>
-    <label class="chk"><input type="checkbox" id="lazyTranslate"> 只翻視窗附近的段落（長論文開得快，捲到哪翻到哪）</label>
+    <label class="chk"><input type="checkbox" id="lazyTranslate"> 先翻視窗附近的段落（長論文開得快，捲到哪翻到哪）</label>
+    <label class="chk"><input type="checkbox" id="bgTranslate"> 看得到的翻完之後，在背景把整篇 PDF 補完（不用等捲到才翻）</label>
     <label class="chk"><input type="checkbox" id="syncScroll"> 左右捲動同步</label>
     <label class="chk"><input type="checkbox" id="dimOriginal"> 原文欄稍微變淡，視線集中在譯文</label>
     <label class="chk"><input type="checkbox" id="showSidebar"> 開啟時就展開註解側欄</label>
@@ -87,8 +93,26 @@
         <option value='"Noto Serif TC", "Source Han Serif TC", "PingFang TC", "Microsoft JhengHei", serif'>思源宋體 / 襯線（適合長文閱讀）</option>
         <option value='"Noto Sans TC", "PingFang TC", "Microsoft JhengHei", sans-serif'>思源黑體 / 無襯線</option>
         <option value='"Microsoft JhengHei", sans-serif'>微軟正黑體</option>
-        <option value='inherit'>沿用原網站字體</option>
+        <option value='"DFKai-SB", "BiauKai", "Kaiti TC", "STKaiti", "KaiTi", serif'>楷體</option>
+        <option value='inherit'>沿用原網站字體（僅網頁）</option>
       </select>
+    </div>
+
+    <div class="field">
+      <label for="transColorSel">譯文字色</label>
+      <select id="transColorSel">
+        <option value="auto">跟原文一樣</option>
+        <option value="#111827">黑</option>
+        <option value="#4b5563">灰</option>
+        <option value="#1d4ed8">藍</option>
+        <option value="#047857">綠</option>
+        <option value="#92400e">咖啡</option>
+        <option value="#b91c1c">紅</option>
+        <option value="#6d28d9">紫</option>
+        <option value="custom">自訂…</option>
+      </select>
+      <input type="color" id="transColorPick" style="display:none; vertical-align: middle; margin-left: 6px;">
+      <p class="hint">閱讀時也可以直接按工具列的「Aa」調整。深色底的標題、圖說會維持原本的顏色。</p>
     </div>
 
     <div class="field inline">

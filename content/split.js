@@ -265,10 +265,20 @@
     });
     engine.value = PL.settings.forceEngine || 'auto';
     engine.addEventListener('change', () => {
+      if (engine.value === 'gemini' && !PL.settings.geminiApiKey && PL.openGeminiDialog) {
+        // 還沒有金鑰就選 Gemini：直接打開金鑰視窗
+        engine.value = PL.settings.forceEngine || 'auto';
+        PL.openGeminiDialog();
+        return;
+      }
       PL.settings.forceEngine = engine.value === 'auto' ? null : engine.value;
+      if (PL.refreshGeminiButton) PL.refreshGeminiButton();
       PL.toast('引擎切換為：' + (engine.value === 'auto' ? '自動' : globalThis.PL_ENGINE_LABEL[engine.value]));
     });
     bar.appendChild(engine);
+
+    // 獨立的 Gemini 入口：貼上金鑰就能改用 Gemini 翻譯
+    if (PL.makeGeminiButton) bar.appendChild(PL.makeGeminiButton());
 
     const btnAll = PL.el('button', { id: 'pl-translate-all', text: '翻譯全文' });
     btnAll.addEventListener('click', () => PL.translateAll());
@@ -293,6 +303,8 @@
     bar.appendChild(modeWrap);
     PL.els.modeWrap = modeWrap;
 
+    if (PL.TextStyle) bar.appendChild(PL.TextStyle.makeButton());
+
     const btnSync = PL.el('button', { id: 'pl-sync', text: '同步捲動', title: '讓兩欄跟著同一段落' });
     btnSync.classList.toggle('pl-on', !!PL.settings.syncScroll);
     btnSync.addEventListener('click', () => {
@@ -308,8 +320,18 @@
     });
     bar.appendChild(btnInk);
 
+    const btnLook = PL.el('button', { id: 'pl-lookupbtn', text: '查字', title: '側邊翻譯：查單字、翻一句話，不會動到文章（選字後也會自動查）' });
+    btnLook.addEventListener('click', () => PL.toggleSidebar(undefined, 'tr'));
+    bar.appendChild(btnLook);
+    PL.els.lookupBtn = btnLook;
+
+    const btnAsk = PL.el('button', { id: 'pl-askbtn', text: '問 AI', title: '問 AI：針對選取的段落向 Gemini 提問' });
+    btnAsk.addEventListener('click', () => PL.toggleSidebar(undefined, 'ai'));
+    bar.appendChild(btnAsk);
+    PL.els.askBtn = btnAsk;
+
     const btnSide = PL.el('button', { id: 'pl-sidebtn', text: '註解' });
-    btnSide.addEventListener('click', () => PL.toggleSidebar());
+    btnSide.addEventListener('click', () => PL.toggleSidebar(undefined, 'notes'));
     bar.appendChild(btnSide);
     PL.els.sideBtn = btnSide;
 
@@ -359,6 +381,7 @@
     root.style.setProperty('--pl-trans-font', s.transFont);
     root.style.setProperty('--pl-trans-lh', String(s.transLineHeight));
     root.classList.toggle('pl-dim', !!s.dimOriginal);
+    if (PL.TextStyle) PL.TextStyle.apply();
     if (PL.els.right) PL.els.right.style.fontSize = (s.transFontScale || 1) === 1 ? '' : (s.transFontScale * 100) + '%';
   }
   PL.applyLook = applyLook;

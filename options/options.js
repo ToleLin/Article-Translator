@@ -2,7 +2,8 @@
 (function () {
   'use strict';
   const $ = (id) => document.getElementById(id);
-  const ALL_ENGINES = ['chrome', 'edge', 'google', 'gemini'];
+  // 桌面版沒有 Chrome 內建 AI
+  const ALL_ENGINES = globalThis.PLDesktop ? ['google', 'edge', 'gemini'] : ['chrome', 'edge', 'google', 'gemini'];
 
   let settings = null;
 
@@ -33,7 +34,7 @@
     const list = $('engineOrder');
     list.textContent = '';
 
-    const enabled = settings.engineOrder.slice();
+    const enabled = settings.engineOrder.filter((e) => ALL_ENGINES.includes(e));
     const disabled = ALL_ENGINES.filter((e) => !enabled.includes(e));
     const rows = enabled.map((e) => ({ key: e, on: true }))
       .concat(disabled.map((e) => ({ key: e, on: false })));
@@ -110,6 +111,22 @@
     });
   }
 
+  /** 譯文字色：預設色票或自訂 */
+  function bindColor() {
+    const sel = $('transColorSel'), pick = $('transColorPick');
+    const cur = settings.transColor || 'auto';
+    const preset = [...sel.options].some((o) => o.value === cur);
+    sel.value = preset ? cur : 'custom';
+    pick.style.display = preset ? 'none' : '';
+    if (!preset && /^#[0-9a-f]{6}$/i.test(cur)) pick.value = cur;
+    sel.addEventListener('change', () => {
+      if (sel.value === 'custom') { pick.style.display = ''; pick.click(); return; }
+      pick.style.display = 'none';
+      save({ transColor: sel.value });
+    });
+    pick.addEventListener('change', () => save({ transColor: pick.value }));
+  }
+
   function bindRange(id, fmt) {
     const out = $(id + 'Out');
     const el = $(id);
@@ -130,8 +147,10 @@
     const lines = [];
     const sample = 'We propose a photonic crystal cavity with a measured quality factor of 1.2 million.';
 
-    // Chrome 內建
-    try {
+    // Chrome 內建（桌面版沒有）
+    if (globalThis.PLDesktop) {
+      lines.push('桌面版沒有 Chrome 內建 AI（那是 Chrome 瀏覽器才有的功能），翻譯改走下面的線上引擎。');
+    } else try {
       const probe = await send({ type: 'ai.probe', sourceLang: settings.sourceLang, targetLang: settings.targetLang });
       const t = probe.translator;
       const map = {
@@ -241,19 +260,57 @@
 
   /* ══════════ 啟動 ══════════ */
 
+  /* 檢查新版本（擴充功能：GitHub Releases；桌面版：主程序的更新器） */
+  function setupUpdateCheck() {
+    const link = $('upd-check'), msg = $('upd-msg');
+    const desktop = !!globalThis.PLDesktop;
+    const show = (u, asked) => {
+      msg.textContent = '';
+      if (!u) return;
+      if (u.newer) {
+        const a = document.createElement('a');
+        a.href = (!desktop && u.assets && u.assets.extension) || u.url;
+        a.target = '_blank';
+        a.rel = 'noopener';
+        a.textContent = '有新版本 v' + u.latest + (desktop ? '' : '，下載更新包');
+        msg.append('→ ', a);
+        if (!desktop) msg.append('（解壓縮後覆蓋原本的資料夾，再到擴充功能頁按「重新載入」）');
+      } else if (asked) {
+        msg.textContent = u.error && !u.latest ? '⚠ ' + u.error : '已是最新版';
+      }
+    };
+    link.addEventListener('click', async (e) => {
+      e.preventDefault();
+      msg.textContent = '檢查中…';
+      try {
+        const res = await chrome.runtime.sendMessage({ type: 'update.check', force: true });
+        if (!res || !res.ok) throw new Error((res && res.error) || '沒有回應');
+        // 桌面版的結果會另外跳對話框，這裡只補一行字
+        show(res.data, !desktop);
+      } catch (err) {
+        msg.textContent = '⚠ ' + (err.message || err);
+      }
+    });
+    chrome.runtime.sendMessage({ type: 'update.check' }).then((res) => show(res && res.ok && res.data, false), () => {});
+  }
+
   (async function main() {
     settings = await globalThis.PL_loadSettings();
     $('ver').textContent = 'v' + chrome.runtime.getManifest().version;
+    setupUpdateCheck();
 
     bindSelect('targetLang');
     bindSelect('sourceLang');
     bindSelect('transFont');
+    bindColor();
     bindSelect('defaultHighlight');
 
     bindCheck('autoFallback');
     bindCheck('skipChinese');
+    bindCheck('translateRefs');
     bindCheck('autoTranslate');
     bindCheck('lazyTranslate');
+    bindCheck('bgTranslate');
     bindCheck('syncScroll');
     bindCheck('dimOriginal');
     bindCheck('showSidebar');
@@ -269,6 +326,21 @@
     refreshDataInfo();
 
     $('testEngines').addEventListener('click', testEngines);
+
+    $('testGemini').addEventListener('click', async () => {
+      const out = $('geminiResult');
+      const key = $('geminiApiKey').value.trim();
+      if (!key) { out.textContent = '請先貼上金鑰'; return; }
+      $('testGemini').disabled = true;
+      out.textContent = '測試中…';
+      try {
+        const r = await send({ type: 'gemini.test', key, model: $('geminiModel').value.trim() || settings.geminiModel, targetLang: settings.targetLang });
+        out.textContent = '✓ 可以用（' + (r.ms / 1000).toFixed(1) + ' 秒）：' + String(r.sample).slice(0, 50);
+      } catch (e) {
+        out.textContent = '✗ ' + (e.message || e);
+      }
+      $('testGemini').disabled = false;
+    });
 
     $('clearCache').addEventListener('click', async () => {
       const all = await chrome.storage.local.get(null);

@@ -12,6 +12,7 @@
   <span class="pl-brand">PaperLens</span>
 
   <select id="pl-engine" title="翻譯引擎"></select>
+  <button id="pl-gemini" data-pl-gemini-btn="1" title="有 Gemini API 金鑰嗎？點這裡貼上，就能改用 Gemini 翻譯">✦ Gemini</button>
   <button id="pl-translate-all">翻譯全文</button>
 
   <div class="pl-prog"><i></i></div>
@@ -39,8 +40,11 @@
 
   <span class="pl-pageno"><span id="pl-page-cur">–</span>/<span id="pl-page-total">–</span></span>
 
+  <button id="pl-style-btn" class="pl-style-btn" title="譯文外觀：字體、字色、字級">Aa</button>
   <button id="pl-sync" class="pl-on">同步捲動</button>
   <button id="pl-inkbtn" title="畫筆、圈選、箭頭、便利貼">標註</button>
+  <button id="pl-lookupbtn" title="側邊翻譯：查單字、翻一句話，不會動到文章（選字後也會自動查）">查字</button>
+  <button id="pl-askbtn" title="問 AI：針對選取的段落向 Gemini 提問（先選一段文字再按，或選字後按「💬 問 AI」）">問 AI</button>
   <button id="pl-sidebtn">註解</button>
   <button id="pl-export">匯出 PDF</button>
   <button id="pl-options" title="設定">⚙</button>
@@ -72,6 +76,11 @@
 <script src="../content/core.js"></script>
 <script src="../content/annotate.js"></script>
 <script src="../content/overlay.js"></script>
+<script src="../content/geminikey.js"></script>
+<script src="../content/textstyle.js"></script>
+<script src="../content/lookup.js"></script>
+<script src="../content/askai.js"></script>
+<script src="layout.js"></script>
 <script src="pdfview.js"></script>
 </body>
 </html>
