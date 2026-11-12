@@ -1,7 +1,7 @@
 /* PaperLens — 檢查新版本（擴充功能的背景程式與桌面版共用）
  *
  * 新版本發佈在 GitHub Releases：版本號改了推上去，自動建置流程就會建一個 vX.Y.Z 發佈，
- * 裡面有 Windows 安裝版、免安裝版，以及擴充功能的更新包（zip）。
+ * 裡面有 Windows 安裝版、免安裝版、macOS 版，以及擴充功能的更新包（zip）。
  * 這裡只負責「問 GitHub 最新是哪一版」，要不要提醒、怎麼提醒由呼叫的一方決定。
  */
 (function (root) {
@@ -60,6 +60,7 @@
       const n = String(a.name || '');
       if (/setup.*\.exe$/i.test(n)) assets.setup = a.browser_download_url;
       else if (/portable.*\.exe$/i.test(n)) assets.portable = a.browser_download_url;
+      else if (/mac.*\.dmg$/i.test(n)) assets.mac = a.browser_download_url;
       else if (/extension.*\.zip$/i.test(n)) assets.extension = a.browser_download_url;
     }
     return {

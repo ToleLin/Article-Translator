@@ -3,6 +3,7 @@
  * 安裝版（PaperLens-Setup）：用 electron-updater 到 GitHub Releases 檢查，有新版就在背景下載，
  *   下載好問一次要不要立刻重新啟動；選「稍後」的話，下次關閉程式時自動安裝。
  * 免安裝版（PaperLens-Portable）沒辦法自己換掉自己，只提醒有新版、附上下載連結。
+ * macOS 版沒有 Apple 開發者簽章（自動更新需要），一樣只提醒、附上 .dmg 的下載連結。
  *
  * 啟動 10 秒後檢查一次，之後每 6 小時一次；選單「說明 → 檢查更新…」可以手動檢查。
  */
@@ -11,6 +12,7 @@
 const { app, dialog, shell, BaseWindow } = require('electron');
 
 const PORTABLE = !!process.env.PORTABLE_EXECUTABLE_DIR;
+const MAC = process.platform === 'darwin';
 const RENOTIFY = 3 * 24 * 3600 * 1000;      // 免安裝版：同一個新版本 3 天提醒一次
 
 let autoUpdater = null;
@@ -131,11 +133,13 @@ async function checkNotify() {
   if (!manual && seen && seen.version === r.version && Date.now() - seen.at < RENOTIFY) return;
   if (store) { store.updateNotice = { version: r.version, at: Date.now() }; saveSoon(); }
 
-  const dl = (PORTABLE ? r.assets.portable : r.assets.setup) || r.url;
+  const dl = (MAC ? r.assets.mac : PORTABLE ? r.assets.portable : r.assets.setup) || r.url;
   const res = await box({
     type: 'info',
     message: '有新版本 ' + r.version + '（目前 ' + cur + '）',
-    detail: (PORTABLE
+    detail: (MAC
+      ? 'macOS 版沒有 Apple 簽章，沒辦法自動更新：下載新的 .dmg，把 PaperLens 拖進「應用程式」取代舊的就好，註解和設定都會保留。'
+      : PORTABLE
       ? '免安裝版沒辦法自動更新：下載新的 PaperLens-Portable 換掉舊的就好，註解和設定都會保留。\n'
         + '想要自動更新的話，可以改用安裝版（PaperLens-Setup）。'
       : '下載新版安裝檔，直接執行覆蓋安裝即可，註解和設定都會保留。') + bullets(PLUpdate.highlights(r.notes, 5)),

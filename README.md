@@ -7,10 +7,10 @@ Chrome 擴充功能。左邊原文、右邊繁體中文，**圖片、表格、�
 
 有兩種用法，功能相同、程式碼共用：
 
-| | Chrome 擴充功能 | Windows 桌面版（.exe） |
+| | Chrome 擴充功能 | 桌面版（Windows .exe／macOS .dmg） |
 |---|---|---|
 | 適合 | 在瀏覽器裡讀期刊網頁、PDF 連結 | 直接開電腦裡的 PDF，像一般 PDF 閱讀器 |
-| 安裝 | 下面「安裝」三步驟 | 下載安裝檔，見[桌面版](#windows-桌面版exe) |
+| 安裝 | 下面「安裝」三步驟 | 下載安裝檔，見[桌面版](#桌面版windowsmacos) |
 | 翻譯引擎 | Chrome 內建 AI、Edge／Bing、Google、Gemini | Google、Edge／Bing、Gemini（沒有 Chrome 內建 AI） |
 
 完整操作說明看 [使用說明書.md](使用說明書.md)。
@@ -73,18 +73,21 @@ Chrome 每次啟動會跳一個「停用開發人員模式擴充功能」的提�
 
 ## 更新
 
-新版本發佈在 GitHub 專案的 **Releases** 頁面，每一版都有三個檔案：
+新版本發佈在 GitHub 專案的 **Releases** 頁面，每一版都有這幾個檔案：
 
 | 檔案 | 給誰用 |
 |---|---|
 | `PaperLens-Setup-x.y.z.exe` | Windows 安裝版（建議）|
 | `PaperLens-Portable-x.y.z.exe` | Windows 免安裝版 |
+| `PaperLens-mac-arm64-x.y.z.dmg` | macOS 版（Apple Silicon，M 系列）|
 | `PaperLens-Extension-x.y.z.zip` | Chrome 擴充功能的更新包 |
 
 **Windows 安裝版：自動更新。** 程式開著時會自己檢查、在背景下載新版，下載好問你要不要立刻重新啟動；選「稍後」就在下次關閉時自動安裝。也可以按「說明 → 檢查更新…」。
 （0.2.0 以前的版本沒有這個功能，請手動下載 `PaperLens-Setup` 覆蓋安裝一次，之後就會自己更新。）
 
 **Windows 免安裝版：** 有新版時會跳出提醒，按「下載新版」，把舊的 .exe 換成新的就好。
+
+**macOS 版：** 有新版時會跳出提醒，按「下載新版」，打開 .dmg 把 PaperLens 拖進「應用程式」取代舊的。
 
 **Chrome 擴充功能：** 有新版時工具列圖示會出現紅色的「新」字，點開會看到更新步驟：
 1. 按「① 下載更新包」，下載 `PaperLens-Extension-x.y.z.zip` 並解壓縮
@@ -109,7 +112,7 @@ node tools/version.js patch      # 版本號加一，例如 0.2.1 → 0.2.2
 
 ---
 
-## Windows 桌面版（.exe）
+## 桌面版（Windows／macOS）
 
 跟擴充功能是同一套 PDF 對照檢視器，包成獨立程式：雙擊 PDF 就用 PaperLens 開、不用開瀏覽器。
 
@@ -119,7 +122,7 @@ node tools/version.js patch      # 版本號加一，例如 0.2.1 → 0.2.2
 - `PaperLens-Setup-x.y.z.exe`：安裝版（可選安裝位置、建立桌面捷徑、可設為 PDF 的開啟方式；**之後會自動更新**）
 - `PaperLens-Portable-x.y.z.exe`：免安裝版，放隨身碟也能用（有新版時會提醒）
 
-開發中的版本：每次推上程式，**Actions** 頁面的「建置與發佈」都會建置一次，在該次執行最下面的 **Artifacts** 可以下載 `PaperLens-Windows`、`PaperLens-Extension`。
+開發中的版本：每次推上程式，**Actions** 頁面的「建置與發佈」都會建置一次，在該次執行最下面的 **Artifacts** 可以下載 `PaperLens-Windows`、`PaperLens-macOS`、`PaperLens-Extension`。
 
 > 安裝檔沒有數位簽章，第一次執行 Windows 可能跳出「Windows 已保護您的電腦」。按 **其他資訊** → **仍要執行** 即可。
 
@@ -131,6 +134,18 @@ node tools/version.js patch      # 版本號加一，例如 0.2.1 → 0.2.2
 - 註解、標註、翻譯快取、設定都存在 `%APPDATA%\PaperLens\paperlens-data.json`（「說明 → 關於」會顯示完整路徑）
 - 桌面版沒有 Chrome 內建 AI（那是 Chrome 瀏覽器才有的），翻譯走 Google、Edge／Bing，填了金鑰就多一個 Gemini
 
+### macOS 版（Apple Silicon：M1／M2／M3／M4…）
+
+1. 到 **Releases** 下載 `PaperLens-mac-arm64-x.y.z.dmg`，打開後把 PaperLens 拖進「應用程式」
+2. 第一次開啟如果出現「無法打開」或「已損毀，應該丟到垃圾桶」：程式沒有 Apple 開發者簽章，macOS 會擋下從網路下載的程式。打開「終端機」貼上這一行、按 Enter，再開一次就可以了：
+   ```
+   xattr -cr /Applications/PaperLens.app
+   ```
+   （或是到「系統設定 → 隱私權與安全性」最下面按「強制打開」）
+
+用法跟 Windows 版一樣，快速鍵的 Ctrl 換成 ⌘（⌘O 開檔、⌘T 翻譯全文、⌘W 關閉分頁…）；在 Finder 對 PDF 按右鍵 →「打開檔案的應用程式 → PaperLens」，或把 PDF 拖到 Dock 的圖示上都可以開。資料存在 `~/Library/Application Support/PaperLens/paperlens-data.json`。
+macOS 版不會自動更新（那需要 Apple 簽章），有新版時會跳提醒。Intel 的 Mac 目前沒有提供。
+
 ### 自己建置
 
 需要 Node.js 20 以上：
@@ -140,6 +155,7 @@ cd desktop
 npm install
 npm start          # 直接執行
 npm run dist       # 在 desktop\dist\ 產生 Setup 與 Portable 兩個 .exe（請在 Windows 上執行）
+npm run dist:mac   # 在 desktop/dist/ 產生 Apple Silicon 的 .dmg（請在 Mac 上執行）
 ```
 
 `npm start`／`npm run dist` 會先跑 `scripts/prepare.js`，把擴充功能的網頁檔案（`pdf/`、`shared/`、`content/`…）複製到 `desktop/app/`，所以改擴充功能的程式就等於改桌面版。
@@ -254,8 +270,8 @@ pdf/pdfview.js         PDF 對照檢視器：渲染、就地覆蓋譯文、翻�
 shared/remote-engines.js  Google／微軟／Gemini 引擎與分派（擴充功能 background 與桌面版共用）
 export/                PDF 匯出頁
 options/ popup/        設定頁與彈出視窗
-desktop/               Windows 桌面版（Electron）：main.js 主程序、shim.js 模擬 chrome.* API
-.github/workflows/desktop.yml  在 Windows 上自動建置 .exe
+desktop/               桌面版（Electron，Windows 與 macOS）：main.js 主程序、shim.js 模擬 chrome.* API
+.github/workflows/build.yml    自動建置 Windows .exe、macOS .dmg、擴充功能更新包，並發佈到 Releases
 tools/make-icons.js    產生圖示（node tools/make-icons.js，含桌面版 512px 圖示）
 tools/devserver.js     開發用靜態伺服器
 tools/testbed.html     離線測試台：用假的 chrome API 把 content script 跑在一篇假論文上

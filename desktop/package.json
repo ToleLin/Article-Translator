@@ -1,7 +1,7 @@
 {
   "name": "paperlens-desktop",
   "productName": "PaperLens",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "PaperLens 文獻對照閱讀器 — 桌面版（左原文、右繁中，PDF 版面原樣保留）",
   "author": "PaperLens",
   "repository": "https://github.com/ToleLin/Article-Translator",
@@ -11,6 +11,7 @@
     "prepare-app": "node scripts/prepare.js",
     "start": "node scripts/prepare.js && electron .",
     "dist": "node scripts/prepare.js && electron-builder --win --x64 --publish never",
+    "dist:mac": "node scripts/prepare.js && electron-builder --mac --arm64 --publish never",
     "dist:dir": "node scripts/prepare.js && electron-builder --dir --publish never"
   },
   "devDependencies": {
@@ -78,6 +79,25 @@
         "role": "Viewer"
       }
     ],
+    "mac": {
+      "icon": "build/icon.png",
+      "category": "public.app-category.productivity",
+      "identity": "-",
+      "hardenedRuntime": false,
+      "gatekeeperAssess": false,
+      "artifactName": "PaperLens-mac-arm64-${version}.${ext}",
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64"
+          ]
+        }
+      ]
+    },
+    "dmg": {
+      "title": "PaperLens ${version}"
+    },
     "linux": {
       "target": [
         "dir"

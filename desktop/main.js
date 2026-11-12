@@ -5,6 +5,8 @@
  *  - 翻譯服務用 Chromium 的網路堆疊（net.fetch）呼叫：沿用系統 proxy 設定、沒有跨網域限制
  *  - 引擎實作直接 require 共用的 shared/remote-engines.js，跟擴充功能的 background 同一份程式碼
  *
+ * Windows 與 macOS（Apple Silicon）共用這一份；平台差異只有選單的排法和「用檔案開啟」的方式。
+ *
  * 桌面版沒有 Chrome 內建 AI（那是 Chrome 瀏覽器才有的功能），翻譯走 Google／微軟，
  * 有 Gemini 金鑰就多一個選擇。
  *
@@ -508,7 +510,34 @@ function buildMenu() {
   const focused = (w) => webContents.getFocusedWebContents() || (frameFor(w) && frameFor(w).activeWC());
   const onFocused = (fn) => (m, w) => { const wc = focused(w); if (wc && !wc.isDestroyed()) fn(wc); };
   const zoomBy = (d) => onFocused((wc) => wc.setZoomLevel(d === 0 ? 0 : Math.max(-3, Math.min(5, wc.getZoomLevel() + d))));
+  const MAC = process.platform === 'darwin';
+  const about = (m, w) => dialog.showMessageBox(w || undefined, {
+    type: 'info', title: '關於 PaperLens',
+    message: 'PaperLens 文獻對照閱讀器 ' + app.getVersion(),
+    detail: '左原文、右繁中，PDF 版面原樣保留；螢光筆、手寫標註、便利貼、雙欄 PDF 匯出。\n\n'
+      + '資料（註解、翻譯快取、設定）存在：\n' + (storeFile || app.getPath('userData'))
+  });
+  const openSettings = () => openAux('options/options.html', { width: 900, height: 900 });
+  // macOS：選單列第一個一定是「程式名稱」選單，關於／設定／結束照慣例放這裡
+  const appMenu = {
+    label: 'PaperLens',
+    submenu: [
+      { label: '關於 PaperLens', click: about },
+      { label: '檢查更新…', click: () => updater.check(true) },
+      { type: 'separator' },
+      { label: '設定…', accelerator: 'Cmd+,', click: openSettings },
+      { type: 'separator' },
+      { role: 'services', label: '服務' },
+      { type: 'separator' },
+      { role: 'hide', label: '隱藏 PaperLens' },
+      { role: 'hideOthers', label: '隱藏其他' },
+      { role: 'unhide', label: '顯示全部' },
+      { type: 'separator' },
+      { role: 'quit', label: '結束 PaperLens' }
+    ]
+  };
   const template = [
+    ...(MAC ? [appMenu] : []),
     {
       label: '檔案',
       submenu: [
@@ -521,10 +550,12 @@ function buildMenu() {
         { label: '翻譯全文', accelerator: 'CmdOrCtrl+T', click: cmd('translate-all') },
         { label: '使用 Gemini 翻譯（輸入金鑰）…', accelerator: 'CmdOrCtrl+G', click: cmd('gemini-key') },
         { label: '匯出左右對照 PDF…', accelerator: 'CmdOrCtrl+E', click: cmd('export-pdf') },
-        { type: 'separator' },
-        { label: '設定…', accelerator: 'CmdOrCtrl+,', click: () => openAux('options/options.html', { width: 900, height: 900 }) },
-        { type: 'separator' },
-        { role: 'quit', label: '結束' }
+        ...(MAC ? [] : [
+          { type: 'separator' },
+          { label: '設定…', accelerator: 'Ctrl+,', click: openSettings },
+          { type: 'separator' },
+          { role: 'quit', label: '結束' }
+        ])
       ]
     },
     {
@@ -554,12 +585,21 @@ function buildMenu() {
         { label: '放大介面文字', accelerator: 'CmdOrCtrl+Shift+=', click: zoomBy(0.5) },
         { label: '縮小介面文字', accelerator: 'CmdOrCtrl+Shift+-', click: zoomBy(-0.5) },
         { label: '介面文字實際大小', accelerator: 'CmdOrCtrl+Shift+0', click: zoomBy(0) },
-        { label: '全螢幕', accelerator: 'F11', click: (m, w) => { if (w) w.setFullScreen(!w.isFullScreen()); } },
+        { label: '全螢幕', accelerator: MAC ? 'Ctrl+Cmd+F' : 'F11', click: (m, w) => { if (w) w.setFullScreen(!w.isFullScreen()); } },
         { type: 'separator' },
         { label: '重新載入', accelerator: 'CmdOrCtrl+R', click: onFocused((wc) => wc.reload()) },
         { label: '開發人員工具', accelerator: 'CmdOrCtrl+Shift+I', click: onFocused((wc) => wc.toggleDevTools()) }
       ]
     },
+    ...(MAC ? [{
+      label: '視窗',
+      submenu: [
+        { role: 'minimize', label: '縮到最小' },
+        { role: 'zoom', label: '縮放' },
+        { type: 'separator' },
+        { role: 'front', label: '全部移到最上層' }
+      ]
+    }] : []),
     {
       label: '說明',
       submenu: [
@@ -568,16 +608,10 @@ function buildMenu() {
         { type: 'separator' },
         { label: '檢查更新…', click: () => updater.check(true) },
         { label: '所有版本與更新內容', click: () => shell.openExternal(REPO + '/releases') },
-        { type: 'separator' },
-        {
-          label: '關於 PaperLens',
-          click: (m, w) => dialog.showMessageBox(w || undefined, {
-            type: 'info', title: '關於 PaperLens',
-            message: 'PaperLens 文獻對照閱讀器 ' + app.getVersion(),
-            detail: '左原文、右繁中，PDF 版面原樣保留；螢光筆、手寫標註、便利貼、雙欄 PDF 匯出。\n\n'
-              + '資料（註解、翻譯快取、設定）存在：\n' + (storeFile || app.getPath('userData'))
-          })
-        }
+        ...(MAC ? [] : [
+          { type: 'separator' },
+          { label: '關於 PaperLens', click: about }
+        ])
       ]
     }
   ];
@@ -586,10 +620,15 @@ function buildMenu() {
 
 /* ══════════ 啟動 ══════════ */
 
+let started = false;        // 第一個視窗開好了沒
+let earlyFile = null;       // macOS：啟動途中就收到要開的檔案
+
 const pdfFromArgv = (argv) => argv.slice(1).find((a) => /\.pdf$/i.test(a) && fs.existsSync(a));
 
 /** 第一個視窗：有指定檔案就開它；不然把上次關閉時開著的文件開回來（最多 12 個，點到才載入） */
 function firstWindow(file) {
+  file = file || earlyFile;
+  earlyFile = null;
   const frame = new TabFrame();
   const last = (store.session && Array.isArray(store.session.files) ? store.session.files : []).filter(isPdf).slice(0, 12);
   if (file || !last.length) { frame.addTab(file || null); return frame; }
@@ -609,9 +648,12 @@ if (!app.requestSingleInstanceLock()) {
     else mainFrame().focus();
   });
 
-  app.on('open-file', (e, f) => {          // macOS
+  // macOS：在 Finder 雙擊 PDF、或把 PDF 拖到 Dock 圖示上。
+  // 程式還沒準備好（資料還沒讀、第一個視窗還沒開）就先記著，開第一個視窗時一起開
+  app.on('open-file', (e, f) => {
     e.preventDefault();
-    if (app.isReady()) openPath(f); else app.once('ready', () => openPath(f));
+    if (started) openPath(f);
+    else if (isPdf(f)) earlyFile = f;
   });
 
   app.whenReady().then(() => {
@@ -628,6 +670,7 @@ if (!app.requestSingleInstanceLock()) {
 
     buildMenu();
     firstWindow(pdfFromArgv(process.argv));
+    started = true;
     updater.init({ getStore: () => store, saveSoon: saveStoreSoon });
 
     app.on('activate', () => { if (!frames.size) firstWindow(null); });
