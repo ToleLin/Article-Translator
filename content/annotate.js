@@ -593,7 +593,9 @@
     let last = 0, m;
     while ((m = re.exec(text))) {
       const end = m.index + m[0].length;
-      if (!cjk && EN_ABBR.test(text.slice(Math.max(0, m.index - 12), m.index + 1))) continue;
+      if (!cjk && EN_ABBR.test(text.slice(Math.max(0, m.index - 12), m.index + 1))
+        // 「etc. Due to …」：etc. 後面接大寫開頭的字，是句子結束
+        && !(/\betc\.$/.test(text.slice(Math.max(0, m.index - 4), m.index + 1)) && /^\s+\p{Lu}/u.test(text.slice(end, end + 4)))) continue;
       if (text.slice(last, end).trim()) spans.push([last, end]);
       last = end;
     }
@@ -617,18 +619,151 @@
     return [a, z];
   };
 
-  /** 選取那一邊的 [s, e) → { tgt: 另一邊對應的句子, src: 選取那一邊所在的句子, single: 只在一句之內 } */
-  function mapRange(src, s, e, srcCjk, tgt, tgtCjk) {
-    const A = sentenceSpans(src, srcCjk), B = sentenceSpans(tgt, tgtCjk);
-    const [i0, i1] = spanIdx(A, s, e);
-    let r;
-    if (A.length === B.length) r = [B[i0][0], B[i1][1]];
-    else {
-      const L1 = src.length || 1;
-      const [j0, j1] = spanIdx(B, Math.floor(s / L1 * tgt.length), Math.ceil(e / L1 * tgt.length));
-      r = [B[j0][0], B[j1][1]];
+  /* ---- 句子對齊 ----
+     兩邊的句數常常不一樣（一句英文翻成兩句中文、或兩句併成一句），不能只照第幾句或位置比例去對。
+     這裡用動態規劃把兩邊的句子配對：長度比例要接近；兩邊都出現的數字、英文縮寫（QDs、IR、45°）
+     是很強的線索。允許 1 對 1、1 對 2、2 對 1、2 對 2，或某一句在另一邊沒有對應。 */
+
+  const ANCHOR_RE = /\d+(?:\.\d+)?|[A-Za-z][A-Za-z0-9-]+/g;
+  const anchorsOf = (t) => (t.match(ANCHOR_RE) || []).map((x) => x.toLowerCase());
+
+  function alignSentences(src, A, tgt, B) {
+    const n = A.length, m = B.length;
+    const la = A.map(([a, z]) => nonWsLen(src.slice(a, z)));
+    const lb = B.map(([a, z]) => nonWsLen(tgt.slice(a, z)));
+    const ratio = la.reduce((x, y) => x + y, 0) / Math.max(1, lb.reduce((x, y) => x + y, 0));
+    const inSrc = new Set(anchorsOf(src)), inTgt = new Set(anchorsOf(tgt));
+    const SA = A.map(([a, z]) => new Set(anchorsOf(src.slice(a, z)).filter((x) => inTgt.has(x))));
+    const SB = B.map(([a, z]) => new Set(anchorsOf(tgt.slice(a, z)).filter((x) => inSrc.has(x))));
+
+    const cost = (i0, i1, j0, j1) => {
+      let x = 0, y = 0;
+      const sa = new Set(), sb = new Set();
+      for (let i = i0; i < i1; i++) { x += la[i]; SA[i].forEach((v) => sa.add(v)); }
+      for (let k = j0; k < j1; k++) { y += lb[k] * ratio; SB[k].forEach((v) => sb.add(v)); }
+      let shared = 0;
+      sa.forEach((v) => { if (sb.has(v)) shared++; });
+      const only = sa.size + sb.size - 2 * shared;
+      return 0.3 * Math.abs(x - y) / Math.sqrt(x + y + 1) + 0.45 * only - 0.9 * shared;
+    };
+    const MOVES = [[1, 1, 0], [1, 2, 0.7], [2, 1, 0.7], [2, 2, 1.3], [1, 3, 1.5], [3, 1, 1.5], [1, 0, 2.6], [0, 1, 2.6]];
+    const f = [], back = [];
+    for (let i = 0; i <= n; i++) { f.push(new Array(m + 1).fill(Infinity)); back.push(new Array(m + 1).fill(null)); }
+    f[0][0] = 0;
+    for (let i = 0; i <= n; i++) {
+      for (let k = 0; k <= m; k++) {
+        if (f[i][k] === Infinity) continue;
+        for (const [di, dk, pen] of MOVES) {
+          if (i + di > n || k + dk > m) continue;
+          const c = f[i][k] + pen + cost(i, i + di, k, k + dk);
+          if (c < f[i + di][k + dk]) { f[i + di][k + dk] = c; back[i + di][k + dk] = [di, dk]; }
+        }
+      }
     }
-    return { tgt: trimWs(tgt, r), src: trimWs(src, [A[i0][0], A[i1][1]]), single: i0 === i1, B };
+    // 每一句對到另一邊的哪幾句（[第一句, 最後一句]）
+    const a2b = new Array(n).fill(null), b2a = new Array(m).fill(null);
+    let i = n, k = m;
+    while (i > 0 || k > 0) {
+      const mv = back[i][k];
+      if (!mv) break;
+      const [di, dk] = mv;
+      const i0 = i - di, k0 = k - dk;
+      for (let x = i0; x < i; x++) a2b[x] = dk ? [k0, k - 1] : null;
+      for (let y = k0; y < k; y++) b2a[y] = di ? [i0, i - 1] : null;
+      i = i0; k = k0;
+    }
+    // 沒有對應的句子：借用前一句（或後一句）的對應
+    const fill = (arr, max) => {
+      for (let x = 0; x < arr.length; x++) {
+        if (arr[x]) continue;
+        let y = x - 1;
+        while (y >= 0 && !arr[y]) y--;
+        if (y >= 0) { arr[x] = [arr[y][1], arr[y][1]]; continue; }
+        y = x + 1;
+        while (y < arr.length && !arr[y]) y++;
+        arr[x] = y < arr.length ? [arr[y][0], arr[y][0]] : [Math.max(0, max - 1), Math.max(0, max - 1)];
+      }
+    };
+    fill(a2b, m);
+    fill(b2a, n);
+    return { a2b, b2a };
+  }
+
+  /* ---- 翻譯單位 ----
+     跨欄、跨頁串起來的同一段話是「一起翻、再切回各個方塊」的，中文切開的位置跟英文不會剛好一樣：
+     左邊第一塊最後一句的中文，可能排在右邊第二塊的開頭。所以對應要以整個單位來算，
+     算出來的位置再換回是哪一塊的哪幾個字（可能落在另一欄、另一頁）。 */
+
+  const CJK_CH = /[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/g;
+  const mostlyCjk = (t) => ((t.match(CJK_CH) || []).length > nonWsLen(t) * 0.3);
+
+  /** PDF：文字層的字串 ↔ 整理過的原文 的逐字對照（沒畫出來的頁面是 null） */
+  function leftMap(x) {
+    if (!PL.isPdf || !x.left) return null;
+    const leftTxt = x.left.textContent, src = x.srcText || '';
+    if (!x._amap || x._amap.l !== leftTxt.length || x._amap.s !== src.length) {
+      x._amap = { l: leftTxt.length, s: src.length, m: alignMap(leftTxt, src) };
+    }
+    return x._amap.m;
+  }
+  const endOf = (tbl, str, p) => {
+    let k = Math.min(p, str.length) - 1;
+    while (k >= 0 && /\s/.test(str[k])) k--;
+    return k < 0 ? 0 : tbl[k] + 1;
+  };
+
+  function unitOfBlock(b) {
+    let chain = [b];
+    if (PL.isPdf && b.head != null && (b.prevI >= 0 || b.nextI >= 0)) {
+      const list = [];
+      for (let x = PL.blocks[b.head]; x && list.length < 12; x = x.nextI >= 0 ? PL.blocks[x.nextI] : null) list.push(x);
+      if (list.includes(b) && list.every((x) => x.state === 'done')) chain = list;
+    }
+    const texts = chain.map((x) => ({
+      src: PL.isPdf ? (x.srcText || '') : (x.left ? x.left.textContent : ''),
+      tgt: x.right ? x.right.textContent : (PL.isPdf ? (x.translated || '') : '')
+    }));
+    const key = chain.map((x, k) => x.i + ':' + texts[k].src.length + ':' + texts[k].tgt.length).join('|');
+    const head = chain[0];
+    if (head._unit && head._unit.key === key) return head._unit;
+    const U = { key, segs: [], src: '', tgt: '' };
+    chain.forEach((x, k) => {
+      if (U.src) U.src += ' ';
+      const seg = { b: x, s0: U.src.length, t0: U.tgt.length, srcText: texts[k].src };
+      U.src += texts[k].src;
+      U.tgt += texts[k].tgt;
+      seg.s1 = U.src.length;
+      seg.t1 = U.tgt.length;
+      U.segs.push(seg);
+    });
+    U.srcCjk = mostlyCjk(U.src);
+    U.tgtCjk = mostlyCjk(U.tgt);
+    U.A = sentenceSpans(U.src, U.srcCjk);
+    U.B = sentenceSpans(U.tgt, U.tgtCjk);
+    U.link = alignSentences(U.src, U.A, U.tgt, U.B);
+    head._unit = U;
+    return U;
+  }
+
+  /** 單位裡某一邊的 [a, z) → 頁面上的 Range（跨到另一塊就會有好幾個；沒畫出來的頁面略過） */
+  function unitRanges(U, side, a, z) {
+    const out = [];
+    for (const seg of U.segs) {
+      const g0 = side === 'left' ? seg.s0 : seg.t0, g1 = side === 'left' ? seg.s1 : seg.t1;
+      const lo = Math.max(a, g0), hi = Math.min(z, g1);
+      if (hi <= lo) continue;
+      const el = side === 'left' ? seg.b.left : seg.b.right;
+      if (!el) continue;
+      let A = lo - g0, Z = hi - g0;
+      if (side === 'left') {
+        const m = leftMap(seg.b);
+        if (m) { A = m.b2a[Math.min(A, seg.srcText.length)]; Z = endOf(m.b2a, seg.srcText, Z); }
+      }
+      Z = Math.min(Z, el.textContent.length);
+      const r = Z > A ? rangeFromOffsets(el, A, Z) : null;
+      if (r) out.push(r);
+    }
+    return out;
   }
 
   /* ---- 找「原樣出現」的字：數字、縮寫、英文術語、單位 ---- */
@@ -636,40 +771,48 @@
   const TOKEN_RE = /[A-Za-z0-9](?:[A-Za-z0-9.+\-−–°%/]*[A-Za-z0-9%°])?/g;
   const isAsciiWord = (c) => !!c && /[A-Za-z0-9]/.test(c);
 
-  function findWord(text, w, from, to) {
+  /** exp：預期出現的位置。同一句裡出現好幾次（QDs … QDs）時，挑離預期位置最近的那一個 */
+  function findWord(text, w, from, to, exp) {
     const low = text.toLowerCase(), q = w.toLowerCase();
-    let i = low.indexOf(q, from);
+    let i = low.indexOf(q, from), best = null, bd = Infinity;
     while (i >= 0 && i + q.length <= to) {
       // 英數字要整個字對上（找 18 不能對到 1968 裡面）
       const ok = !/^[A-Za-z0-9]/.test(q) || (!isAsciiWord(text[i - 1]) && !isAsciiWord(text[i + q.length]));
-      if (ok) return [i, i + q.length];
+      if (ok) {
+        if (exp == null) return [i, i + q.length];
+        const d = Math.abs(i + q.length / 2 - exp);
+        if (d < bd) { bd = d; best = [i, i + q.length]; }
+      }
       i = low.indexOf(q, i + 1);
     }
-    return null;
+    return best;
   }
 
   /** 選的字整段原樣出現在另一邊（例如選了「1968」「AR」「HoloLens」） */
-  function findLiteral(phrase, text, from, to) {
+  function findLiteral(phrase, text, from, to, exp) {
     const p = phrase.replace(/\s+/g, ' ').replace(/^[\s,.;:()\[\]"'“”‘’，。；：、（）]+|[\s,.;:()\[\]"'“”‘’，。；：、（）]+$/g, '');
     if (!p) return null;
-    const whole = findWord(text, p, from, to) || (/[A-Za-z]{2}s$/.test(p) ? findWord(text, p.slice(0, -1), from, to) : null);
+    const whole = findWord(text, p, from, to, exp) || (/[A-Za-z]{2}s$/.test(p) ? findWord(text, p.slice(0, -1), from, to, exp) : null);
     if (whole) return whole;
     // 選到數字後面黏著的引用上標（1968¹、網頁上的 19681）：去掉上標再找
     const core = p.replace(/[⁰-⁹¹²³⁺⁻,–\-]+$/u, '');
     if (core && core !== p) {
-      const r = findWord(text, core, from, to);
+      const r = findWord(text, core, from, to, exp);
       if (r) return r;
     }
-    const tokens = p.match(TOKEN_RE) || [];
+    const all = p.match(TOKEN_RE) || [];
     const rest = p.replace(TOKEN_RE, '').replace(/[\s\p{P}\p{S}⁰-⁹¹²³]/gu, '');
-    if (!tokens.length || rest) return null;          // 還有別的字 → 交給翻譯比對
+    if (!all.length || rest) return null;             // 還有別的字 → 交給翻譯比對
+    // 「focus on」不能只因為找到 on 就算對到：虛詞不算
+    const tokens = all.length > 1 ? all.filter((t) => !STOP.has(t.toLowerCase())) : all;
+    if (!tokens.length) return null;
     const hits = [];
     for (const t of tokens) {
-      let r = findWord(text, t, from, to);
+      let r = findWord(text, t, from, to, exp);
       if (!r && /^\d{5,}$/.test(t)) {                 // 19681 → 1968
-        for (let k = 1; k <= 3 && !r; k++) r = findWord(text, t.slice(0, -k), from, to);
+        for (let k = 1; k <= 3 && !r; k++) r = findWord(text, t.slice(0, -k), from, to, exp);
       }
-      if (!r && /[A-Za-z]{2}s$/.test(t)) r = findWord(text, t.slice(0, -1), from, to);   // q-BICs → q-BIC
+      if (!r && /[A-Za-z]{2}s$/.test(t)) r = findWord(text, t.slice(0, -1), from, to, exp);   // q-BICs → q-BIC
       if (r) hits.push(r);
     }
     if (!hits.length || hits.length < tokens.length / 2) return null;
@@ -688,7 +831,10 @@
     return out;
   }
 
-  function matchCjk(q, text, from, to) {
+  /** 位置的加減分：分數一樣高的候選，挑離預期位置近的 */
+  const nearBonus = (mid, exp, from, to) => (exp == null ? 0 : -0.06 * Math.min(1, Math.abs(mid - exp) / Math.max(20, to - from)));
+
+  function matchCjk(q, text, from, to, exp) {
     const Q = units(q), T = units(text).filter((u) => u.i >= from && u.j <= to);
     if (!Q.length || !T.length) return null;
     const m = Q.length;
@@ -715,9 +861,12 @@
         if (!need.has(t)) continue;                   // 頭尾都要是對得上的字
         const len = j - i + 1;
         const score = 0.8 * fScore(common, m, len) + 0.2 * (m > 1 && len > 1 ? fScore(bcommon, m - 1, len - 1) : fScore(common, m, len));
-        if (!best || score > best.score + 1e-9 ||
-            (Math.abs(score - best.score) < 1e-9 && Math.abs(len - m) < Math.abs(best.len - m))) {
-          best = { score, i, j, len };
+        // 至少要對到六成的字：兩個字的詞只對到一個字（方案 ↔ 圖案）是碰巧，不算
+        if (common < Math.ceil(m * 0.6)) continue;
+        const adj = score + nearBonus((T[i].i + T[j].j) / 2, exp, from, to);
+        if (!best || adj > best.adj + 1e-9 ||
+            (Math.abs(adj - best.adj) < 1e-9 && Math.abs(len - m) < Math.abs(best.len - m))) {
+          best = { score, adj, i, j, len };
         }
       }
     }
@@ -728,8 +877,9 @@
     // 補的必須是緊鄰的中文字（中間沒有空白或標點）
     const glued = (x, y) => x >= 0 && y < T.length && /\p{Script=Han}/u.test(T[x < i || x > j ? x : y].t)
       && /^[^\s\p{P}]*$/u.test(text.slice(T[x].j, T[y].i));
-    for (let n = 0; n < qi0 && glued(i - 1, i) && j - i + 1 < m + 2; n++) i--;
-    for (let n = 0; n < m - 1 - qi1 && glued(j, j + 1) && j - i + 1 < m + 2; n++) j++;
+    // 最多補到跟選的字一樣長（補過頭會把旁邊不相干的字也標進去）
+    for (let n = 0; n < qi0 && glued(i - 1, i) && j - i + 1 < m; n++) i--;
+    for (let n = 0; n < m - 1 - qi1 && glued(j, j + 1) && j - i + 1 < m; n++) j++;
     return { r: snapWords(text, [T[i].i, T[j].j]), score: best.score };
   }
 
@@ -769,7 +919,9 @@
   /* ---- 翻譯後比對：英文以單字為單位 ---- */
 
   const STOP = new Set(('a an the of to in on for and or with by as at from is are was were be been being this that these ' +
-    'those its it their our we which into via than such can may also has have had not but').split(' '));
+    'those its it their our we which into via than such can may also has have had not but so if then there here when where while ' +
+    'do does did will would could should about over under between through during within without due order because since ' +
+    'both each any all no up out off very some own same just still even').split(' '));
   const stem = (w) => w.toLowerCase().replace(/(ies|es|s|ed|ing|ly)$/, '').replace(/(e)$/, '');
   function sameWord(x, y) {
     if (x === y) return true;
@@ -779,13 +931,14 @@
     if (n < 4) return false;
     let k = 0;
     while (k < n && a[k] === b[k]) k++;
-    return k >= 5 && k >= n * 0.7;                    // diffraction ↔ diffractive
+    if (k >= 5 && k >= n * 0.7) return true;          // diffraction ↔ diffractive
+    return n >= 5 && (a.includes(b) || b.includes(a)); // wavelength ↔ subwavelength
   }
 
-  function matchEn(q, text, from, to) {
+  function matchEn(q, text, from, to, exp) {
     const qw = (q.match(/[A-Za-z0-9][A-Za-z0-9'\-]*/g) || []).map((w) => w.toLowerCase());
-    let need = qw.filter((w) => !STOP.has(w));
-    if (!need.length) need = qw;
+    const need = qw.filter((w) => !STOP.has(w));
+    // 只有 in、on、for 這類虛詞：到處都是，對到哪一個都不可靠 → 不對字，交給整句標示
     if (!need.length) return null;
     const re = /[A-Za-z0-9][A-Za-z0-9'\-]*/g;
     const T = [];
@@ -802,19 +955,21 @@
         const used = new Array(need.length).fill(false);
         let common = 0, content = 0;
         for (let k = i; k <= j; k++) {
-          if (STOP.has(T[k].t) && need.length !== qw.length) continue;
+          // 虛詞不能拿來對字，但夾在中間會讓標出來的範圍變長：算半個
+          if (STOP.has(T[k].t)) { content += 0.5; continue; }
           content++;
           const u = need.findIndex((w, x) => !used[x] && sameWord(w, T[k].t));
           if (u >= 0) { used[u] = true; common++; }
         }
         const score = fScore(common, need.length, Math.max(1, content));
-        if (!best || score > best.score + 1e-9) best = { score, i, j };
+        const adj = score + nearBonus((T[i].i + T[j].j) / 2, exp, from, to);
+        if (!best || adj > best.adj + 1e-9) best = { score, adj, i, j };
       }
     }
     if (!best || best.score < 0.5) return null;
     // 只對到一部分（thinnest geometry → geometry）：照沒對到的字數往前後補（→ slimmest geometry）
     const Qc = need.map((t) => ({ t }));
-    const [qi0, qi1] = matchedSpan(Qc, T.slice(best.i, best.j + 1).filter((w) => !STOP.has(w.t) || need.length === qw.length), sameWord);
+    const [qi0, qi1] = matchedSpan(Qc, T.slice(best.i, best.j + 1).filter((w) => !STOP.has(w.t)), sameWord);
     let i = best.i, j = best.j;
     const joined = (x, y) => /^[\s\-]*$/.test(text.slice(T[x].j, T[y].i));     // 中間沒有標點才補
     for (let n = 0; n < qi0 && i > 0 && T[i - 1].i >= from && !STOP.has(T[i - 1].t) && joined(i - 1, i); n++) i--;
@@ -870,8 +1025,19 @@
     return alt.length === 1 ? alt[0] : null;
   }
   async function markedTranslate(c) {
-    const sen = c.selSentence, a = c.rel[0], z = c.rel[1];
-    if (!sen || z <= a || sen.length > 900) return null;
+    let sen = c.selSentence, a = c.rel[0], z = c.rel[1];
+    if (!sen || z <= a) return null;
+    // 句子很長：只取選取處前後的幾個子句（前後文夠用就好，太長反而容易翻走樣）
+    // （中文一個字的資訊量大約是英文的三倍，門檻也跟著不同）
+    const [trig, near, far] = c.selCjk ? [100, 22, 70] : [320, 60, 180];
+    if (sen.length > trig) {
+      const CL = /[，、；：,;:]/;
+      let lo = a, hi = z;
+      while (lo > 0 && (a - lo < near || !CL.test(sen[lo - 1])) && a - lo < far) lo--;
+      while (hi < sen.length && (hi - z < near || !CL.test(sen[hi])) && hi - z < far) hi++;
+      sen = sen.slice(lo, hi);
+      a -= lo; z -= lo;
+    }
     const marked = sen.slice(0, a) + '【' + sen.slice(a, z).trim() + '】' + sen.slice(z);
     const out = await phraseTranslate(marked, c.from, c.to, c.engine);
     return out ? markedPart(out) : null;
@@ -879,77 +1045,74 @@
 
   /** 一個段落裡選了 [s, e)（selected 那一邊的文字位置）→ 另一邊對應的句子，以及找字需要的資料 */
   function counterpart(b, side, s, e) {
-    if (!b || !b.left || !b.right || b.state !== 'done') return null;
-    const tgtLang = (PL.settings && PL.settings.targetLang) || 'zh-Hant';
-    const tgtCjk = /^(zh|ja|ko)/i.test(tgtLang);
-    const leftTxt = b.left.textContent, rightTxt = b.right.textContent;
-    if (!leftTxt.trim() || !rightTxt.trim()) return null;
-    // PDF 左欄文字層的字串沒有行與行之間的空白：句子要在整理過的原文（srcText）上切，再按「非空白字元」對回去
-    const src = PL.isPdf ? b.srcText : leftTxt;
-    // 起點對到「第一個被選到的字」，終點對到「最後一個被選到的字的後面」（不然會多亮下一句）
-    let map = null;
-    if (PL.isPdf) {
-      if (!b._amap || b._amap.l !== leftTxt.length || b._amap.s !== src.length) {
-        b._amap = { l: leftTxt.length, s: src.length, m: alignMap(leftTxt, src) };
-      }
-      map = b._amap.m;
+    if (!b || b.state !== 'done') return null;
+    const selEl = side === 'left' ? b.left : b.right;
+    if (!selEl) return null;
+    const U = unitOfBlock(b);
+    if (!U.src.trim() || !U.tgt.trim()) return null;
+    const seg = U.segs.find((x) => x.b === b);
+
+    // 選取的位置 → 單位裡的位置
+    let us, ue;
+    if (side === 'left') {
+      const m = leftMap(b);
+      const leftTxt = selEl.textContent;
+      // 起點對到「第一個被選到的字」，終點對到「最後一個被選到的字的後面」（不然會多亮下一句）
+      const ss = m ? m.a2b[Math.min(s, leftTxt.length)] : s;
+      const se = Math.max(ss + 1, m ? endOf(m.a2b, leftTxt, e) : e);
+      us = seg.s0 + ss; ue = seg.s0 + se;
+    } else {
+      us = seg.t0 + s; ue = seg.t0 + e;
     }
-    const endOf = (tbl, str, p) => {
-      let k = Math.min(p, str.length) - 1;
-      while (k >= 0 && /\s/.test(str[k])) k--;
-      return k < 0 ? 0 : tbl[k] + 1;
-    };
-    const toSrc = (p) => (map ? map.a2b[Math.min(p, leftTxt.length)] : p);
-    const toSrcEnd = (p) => (map ? endOf(map.a2b, leftTxt, p) : p);
-    const toLeft = (p) => (map ? map.b2a[Math.min(p, src.length)] : p);
-    const toLeftEnd = (p) => (map ? endOf(map.b2a, src, p) : p);
+    const left = side === 'left';
+    const selText = left ? U.src : U.tgt, othText = left ? U.tgt : U.src;
+    const X = left ? U.A : U.B, Y = left ? U.B : U.A, link = left ? U.link.a2b : U.link.b2a;
+    const [i0, i1] = spanIdx(X, us, ue);
+    const j0 = Math.min(link[i0][0], link[i1][0]), j1 = Math.max(link[i0][1], link[i1][1]);
+    const sent = trimWs(othText, [Y[j0][0], Y[j1][1]]);
+    const selSent = trimWs(selText, [X[i0][0], X[i1][1]]);
+    const rel = ((us + ue) / 2 - selSent[0]) / Math.max(1, selSent[1] - selSent[0]);
+
+    const tgtLang = (PL.settings && PL.settings.targetLang) || 'zh-Hant';
     const srcLang = (globalThis.PLTranslate && PLTranslate.sourceLang && PLTranslate.sourceLang !== 'auto')
       ? PLTranslate.sourceLang : 'en';
-
-    if (side === 'left') {
-      const ss = toSrc(s), se = Math.max(ss + 1, toSrcEnd(e));
-      const m = mapRange(src, ss, se, false, rightTxt, tgtCjk);
-      return {
-        el: b.right, text: rightTxt, sent: m.tgt, spans: m.B, toEl: (p) => p, toElEnd: (p) => p, cjk: tgtCjk,
-        selEl: b.left, selSent: [toLeft(m.src[0]), toLeftEnd(m.src[1])],
-        phrase: src.slice(ss, se), ratio: nonWsLen(src.slice(ss, se)) / Math.max(1, nonWsLen(src.slice(m.src[0], m.src[1]))),
-        selSentence: src.slice(m.src[0], m.src[1]), rel: [ss - m.src[0], se - m.src[0]],
-        single: m.single, from: srcLang, to: tgtLang, engine: b.engine
-      };
-    }
-    const m = mapRange(rightTxt, s, e, tgtCjk, src, false);
     return {
-      el: b.left, text: src, sent: m.tgt, spans: m.B, toEl: toLeft, toElEnd: toLeftEnd, cjk: false,
-      selEl: b.right, selSent: m.src,
-      phrase: rightTxt.slice(s, e), ratio: nonWsLen(rightTxt.slice(s, e)) / Math.max(1, nonWsLen(rightTxt.slice(m.src[0], m.src[1]))),
-      selSentence: rightTxt.slice(m.src[0], m.src[1]), rel: [s - m.src[0], e - m.src[0]],
-      single: m.single, from: tgtLang, to: srcLang, engine: b.engine
+      U, side, other: left ? 'right' : 'left',
+      text: othText, sent, sentIdx: [j0, j1], spans: Y, cjk: left ? U.tgtCjk : U.srcCjk,
+      exp: sent[0] + Math.max(0, Math.min(1, rel)) * (sent[1] - sent[0]),      // 預期出現在句子的哪裡
+      selSent, selCjk: left ? U.srcCjk : U.tgtCjk,
+      phrase: selText.slice(us, ue),
+      ratio: nonWsLen(selText.slice(us, ue)) / Math.max(1, nonWsLen(selText.slice(selSent[0], selSent[1]))),
+      selSentence: selText.slice(selSent[0], selSent[1]), rel: [us - selSent[0], ue - selSent[0]],
+      single: i0 === i1, from: left ? srcLang : tgtLang, to: left ? tgtLang : srcLang, engine: b.engine
     };
   }
 
-  /** c.text 上的 [a, z) → c.el 裡的 Range */
-  function elRange(c, a, z) {
-    const A = c.toEl(a), Z = Math.min(c.toElEnd(z), c.el.textContent.length);
-    return Z > A ? rangeFromOffsets(c.el, A, Z) : null;
-  }
+  /** c.text 上的 [a, z) → 頁面上的 Range（跨到另一塊時會有好幾個） */
+  const elRanges = (c, a, z) => unitRanges(c.U, c.other, a, z);
+  const elRange = (c, a, z) => elRanges(c, a, z)[0] || null;
+  const selSentRanges = (c) => unitRanges(c.U, c.side, c.selSent[0], c.selSent[1]);
 
-  /** 在對應的句子裡找字；句子對錯了（兩邊句數不同）就整段找（要更像才算） */
+  /**
+   * 在對應的句子裡找字。找不到時只再看前後各一句（句子配對偶爾會差一句），而且要很像才算。
+   * 不到更遠的地方找：同一個詞在整段常常出現好幾次，找到別句去就是「對應跑掉」。
+   */
   function locateIn(c, finder) {
-    let f = finder(c.sent[0], c.sent[1]);
+    let f = finder(c.sent[0], c.sent[1], c.exp);
     let sent = c.sent;
     if (!f) {
-      f = finder(0, c.text.length);
-      if (f && f.score < 0.7) f = null;
-      if (f) {
-        const k = c.spans.findIndex(([a, z]) => z > f.r[0] && a < f.r[1]);
-        if (k >= 0) sent = trimWs(c.text, c.spans[k]);
+      for (const k of [c.sentIdx[0] - 1, c.sentIdx[1] + 1]) {
+        if (k < 0 || k >= c.spans.length) continue;
+        const sp = trimWs(c.text, c.spans[k]);
+        const g = finder(sp[0], sp[1], null);
+        if (g && g.score >= 0.85 && (!f || g.score > f.score)) { f = g; sent = sp; }
       }
     }
     return f ? { r: f.r, score: f.score, sent } : null;
   }
 
-  const literalHit = (phrase, text, a, z) => {
-    const r = findLiteral(phrase, text, a, z);
+  const literalHit = (phrase, text, a, z, exp) => {
+    const r = findLiteral(phrase, text, a, z, exp);
     return r ? { r, score: 1 } : null;
   };
 
@@ -963,8 +1126,8 @@
   }
 
   function paintSync(strong, ctx) {
-    strong = strong.filter(Boolean);
-    ctx = ctx.filter(Boolean);
+    strong = [].concat(...strong).filter(Boolean);
+    ctx = [].concat(...ctx).filter(Boolean);
     if (strong.length) CSS.highlights.set('pl-sync', new Highlight(...strong)); else CSS.highlights.delete('pl-sync');
     if (ctx.length) CSS.highlights.set('pl-sync-ctx', new Highlight(...ctx)); else CSS.highlights.delete('pl-sync-ctx');
   }
@@ -1008,47 +1171,142 @@
     const hits = collectHits(info);
     if (!hits.length) { clearSync(); return; }
 
-    const sentRange = (c, sent) => elRange(c, sent[0], sent[1]);
-    const selSentRange = (c) => (c.selSent[1] > c.selSent[0] ? rangeFromOffsets(c.selEl, c.selSent[0], Math.min(c.selSent[1], c.selEl.textContent.length)) : null);
+    const sentRanges = (c, sent) => elRanges(c, sent[0], sent[1]);
 
     const c = hits[0];
     if (!isWordMode(hits)) {
-      const strong = hits.map((h) => sentRange(h, h.sent));
+      const strong = hits.map((h) => sentRanges(h, h.sent));
       paintSync(strong, []);
-      scrollToRange(info, strong[0]);
+      scrollToRange(info, [].concat(...strong)[0]);
       return;
     }
 
     // 1) 原樣出現的字（數字、縮寫、術語）→ 馬上標
-    const lit = locateIn(c, (a, z) => literalHit(c.phrase, c.text, a, z));
+    const lit = locateIn(c, (a, z, exp) => literalHit(c.phrase, c.text, a, z, exp));
     if (lit) {
-      const r = elRange(c, lit.r[0], lit.r[1]);
-      paintSync([r], [sentRange(c, lit.sent), selSentRange(c)]);
-      scrollToRange(info, r);
+      const r = elRanges(c, lit.r[0], lit.r[1]);
+      paintSync([r], [sentRanges(c, lit.sent), selSentRanges(c)]);
+      scrollToRange(info, r[0]);
       return;
     }
 
     // 2) 先淡淡標出整句，等選的字翻好再找出對應的那幾個字
-    const sr = sentRange(c, c.sent);
-    paintSync([], [sr, selSentRange(c)]);
-    scrollToRange(info, sr);
+    const sr = sentRanges(c, c.sent);
+    paintSync([], [sr, selSentRanges(c)]);
+    scrollToRange(info, sr[0]);
     alignPhrase(c).then((found) => {
       if (tok !== syncTok) return;                    // 選取已經換了
       if (found) {
-        const r = elRange(c, found.r[0], found.r[1]);
-        paintSync([r], [sentRange(c, found.sent), selSentRange(c)]);
-        if (found.sent !== c.sent) scrollToRange(info, r);
+        const r = elRanges(c, found.r[0], found.r[1]);
+        paintSync([r], [sentRanges(c, found.sent), selSentRanges(c)]);
+        if (found.sent !== c.sent) scrollToRange(info, r[0]);
       } else {
-        paintSync([sr], [selSentRange(c)]);               // 找不到對應的字：整句標黃
+        paintSync([sr], [selSentRanges(c)]);              // 找不到對應的字：整句標黃
       }
-    }, () => { if (tok === syncTok) paintSync([sr], [selSentRange(c)]); });
+    }, () => { if (tok === syncTok) paintSync([sr], [selSentRanges(c)]); });
+  }
+
+  /* ---- 逐字對照（最後一招）----
+     選的字直接翻過去對不到（同義詞：譯文寫「實現」，單獨翻 achieved 卻是「達成」）：
+     反過來，把對應句子裡的每個詞各自翻成選取那邊的語言，看哪一個詞的意思跟選的字最像。
+     一句話只問一次，結果記在記憶體。 */
+
+  const glossCache = new Map();
+  async function glossWords(words, from, to, prefer) {
+    const key = (w) => from + '>' + to + ':' + w;
+    const missing = words.filter((w) => !glossCache.has(key(w)));
+    if (missing.length) {
+      const order = [];
+      [prefer, 'google', 'edge'].forEach((e) => { if (e && e !== 'chrome' && !order.includes(e)) order.push(e); });
+      for (const engine of order) {
+        if (engine === 'gemini' && !(PL.settings && PL.settings.geminiApiKey)) continue;
+        try {
+          const res = await PL.send({ type: 'translate.remote', engine, texts: missing, sourceLang: from, targetLang: to });
+          if (!res || !res.result) continue;
+          missing.forEach((w, k) => glossCache.set(key(w), String(res.result[k] || '')));
+          break;
+        } catch (e) { /* 換下一個引擎 */ }
+      }
+      if (glossCache.size > 3000) glossCache.clear();
+    }
+    return words.map((w) => glossCache.get(key(w)) || '');
+  }
+
+  async function glossMatch(c, phrase) {
+    const [a, z] = c.sent;
+    const cands = [];
+    if (c.cjk) {
+      if (!SEG) return null;
+      for (const sg of SEG.segment(c.text.slice(a, z))) {
+        if (sg.isWordLike && /\p{Script=Han}|\p{Script=Hiragana}|\p{Script=Katakana}|\p{Script=Hangul}/u.test(sg.segment)) {
+          cands.push({ t: sg.segment, i: a + sg.index, j: a + sg.index + sg.segment.length });
+        }
+      }
+    } else {
+      const re = /[A-Za-z][A-Za-z'\-]{2,}/g;
+      let m;
+      const part = c.text.slice(a, z);
+      while ((m = re.exec(part))) if (!STOP.has(m[0].toLowerCase())) cands.push({ t: m[0], i: a + m.index, j: a + m.index + m[0].length });
+    }
+    if (!cands.length) return null;
+    // 句子很長：只看預期位置附近的詞
+    if (cands.length > 45) {
+      const near = cands.slice().sort((x, y) => Math.abs((x.i + x.j) / 2 - c.exp) - Math.abs((y.i + y.j) / 2 - c.exp)).slice(0, 45);
+      const keep = new Set(near);
+      for (let k = cands.length - 1; k >= 0; k--) if (!keep.has(cands[k])) cands.splice(k, 1);
+    }
+    const uniq = [...new Set(cands.map((x) => x.t.toLowerCase()))];
+    const gl = await glossWords(uniq, c.to, c.from, c.engine);
+    const glossOf = new Map(uniq.map((w, k) => [w, gl[k]]));
+
+    let scoreOf;
+    if (c.selCjk) {
+      const P = units(phrase).map((u) => u.t);
+      if (!P.length) return null;
+      scoreOf = (g) => {
+        const G = units(g).map((u) => u.t);
+        if (!G.length) return 0;
+        const left = P.slice();
+        let common = 0;
+        for (const t of G) { const k = left.indexOf(t); if (k >= 0) { left.splice(k, 1); common++; } }
+        return fScore(common, P.length, G.length);
+      };
+    } else {
+      const P = (phrase.match(/[A-Za-z][A-Za-z'\-]*/g) || []).map((w) => w.toLowerCase()).filter((w) => !STOP.has(w));
+      if (!P.length) return null;
+      scoreOf = (g) => {
+        const G = (g.match(/[A-Za-z][A-Za-z'\-]*/g) || []).map((w) => w.toLowerCase()).filter((w) => !STOP.has(w));
+        if (!G.length) return 0;
+        const common = P.filter((w) => G.some((x) => sameWord(w, x))).length;
+        return fScore(common, P.length, G.length);
+      };
+    }
+    let best = null;
+    cands.forEach((x, k) => {
+      x.score = scoreOf(glossOf.get(x.t.toLowerCase()) || '');
+      const adj = x.score + nearBonus((x.i + x.j) / 2, c.exp, a, z);
+      if (x.score >= 0.6 && (!best || adj > best.adj)) best = { adj, k };
+    });
+    if (!best) return null;
+    // 旁邊緊鄰的詞也對得上就一起標（「光束 轉向」）
+    let i = best.k, j = best.k;
+    const tight = (x, y) => /^[\s\-]*$/.test(c.text.slice(cands[x].j, cands[y].i));
+    while (i > 0 && cands[i - 1].score >= 0.6 && tight(i - 1, i)) i--;
+    while (j + 1 < cands.length && cands[j + 1].score >= 0.6 && tight(j, j + 1)) j++;
+    return { r: [cands[i].i, cands[j].j], score: 0.9 * cands[best.k].score, sent: c.sent };
   }
 
   /** 選的字 → 另一邊句子裡對應的位置。短的字先單獨翻；長一點的片語連整句一起翻比較準 */
   async function alignPhrase(c) {
     const phrase = c.phrase.replace(/\s+/g, ' ').trim();
-    const find = (q) => q && locateIn(c, (a, z) => literalHit(q, c.text, a, z)
-      || (c.cjk ? matchCjk(q, c.text, a, z) : matchEn(q, c.text, a, z)));
+    // 選的只有 the、of、in 這類虛詞：沒有可靠的對應，整句標示就好
+    if (!c.selCjk) {
+      const w = (phrase.match(/[A-Za-z0-9][A-Za-z0-9'\-]*/g) || []).map((x) => x.toLowerCase());
+      if (w.length && w.every((x) => STOP.has(x))) return null;
+    }
+    const onlyStop = (q) => { const w = (q.match(/[A-Za-z0-9][A-Za-z0-9'\-]*/g) || []); return w.length > 0 && w.every((x) => STOP.has(x.toLowerCase())); };
+    const find = (q) => q && !(!c.cjk && onlyStop(q)) && locateIn(c, (a, z, exp) => literalHit(q, c.text, a, z, exp)
+      || (c.cjk ? matchCjk(q, c.text, a, z, exp) : matchEn(q, c.text, a, z, exp)));
     const short = c.cjk ? phrase.split(' ').length <= 2 : nonWsLen(phrase) <= 6;
     const tries = short
       ? [() => phraseTranslate(phrase, c.from, c.to, c.engine), () => markedTranslate(c)]
@@ -1062,11 +1320,16 @@
       if (f && (!best || f.score > best.score)) best = f;
       if (best && best.score >= 0.85) break;
     }
+    if ((!best || best.score < 0.7) && nonWsLen(phrase) <= 40) {
+      let g = null;
+      try { g = await glossMatch(c, phrase); } catch (e) { /* ignore */ }
+      if (g && (!best || g.score > best.score)) best = g;
+    }
     return best;
   }
 
   // 測試用
-  PL._sync = { findLiteral, matchCjk, matchEn, snapWords, sentenceSpans, alignMap, markedPart };
+  PL._sync = { findLiteral, matchCjk, matchEn, snapWords, sentenceSpans, alignMap, markedPart, counterpart, elRange, alignSentences, phraseTranslate, markedTranslate, alignPhrase, glossMatch };
 
   /* ══════════ 翻譯選取的文字 ══════════ */
 
@@ -1191,7 +1454,7 @@
 
     if (!hits.length || !isWordMode(hits)) return;
     const c = hits[0];
-    let found = locateIn(c, (a, z) => literalHit(c.phrase, c.text, a, z));
+    let found = locateIn(c, (a, z, exp) => literalHit(c.phrase, c.text, a, z, exp));
     if (!found) {
       meta.textContent = '對應的原文句子 · 正在找對應的字…';
       try { found = await alignPhrase(c); } catch (e) { found = null; }

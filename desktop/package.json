@@ -1,7 +1,7 @@
 {
   "name": "paperlens-desktop",
   "productName": "PaperLens",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "PaperLens 文獻對照閱讀器 — 桌面版（左原文、右繁中，PDF 版面原樣保留）",
   "author": "PaperLens",
   "repository": "https://github.com/ToleLin/Article-Translator",
