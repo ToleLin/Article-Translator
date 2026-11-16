@@ -1,0 +1,99 @@
+/* PaperLens — 對調：左右位置、翻譯方向
+ *
+ *  ⇄ 左右對調：原文跟譯文換邊（譯文在左、原文在右）。只是換位置，內容不變。
+ *  英→中／中→英：切換翻譯方向。讀中文文獻時切成「中→英」，中文段落就會翻成英文。
+ *
+ * 網頁對照與 PDF 檢視器共用；真正重新翻譯的部分由各自的 PL.applyTargetLang() 處理。
+ */
+(function () {
+  'use strict';
+  const PL = globalThis.PL;
+  if (!PL || PL.Direction) return;
+
+  const isCjk = (l) => /^(zh|ja|ko)/i.test(l || '');
+  const target = () => (PL.settings && PL.settings.targetLang) || 'zh-Hant';
+  PL.isCjkLang = isCjk;
+
+  /** 使用者自己看的語言（介面、AI 回答用）：翻成英文的時候，回答還是用原本的中文 */
+  PL.readerLang = () => (isCjk(target()) ? target() : ((PL.settings && PL.settings.lastCjkTarget) || 'zh-Hant'));
+
+  /** 這段文字已經是目標語言了（不用翻） */
+  PL.alreadyTarget = function (text) {
+    const tgt = target();
+    if (/^zh/i.test(tgt)) return PL.cjkRatio(text) > 0.5;
+    if (/^ja/i.test(tgt)) return /[぀-ヿ]/.test(text);
+    if (/^ko/i.test(tgt)) return /[가-힯]/.test(text);
+    // 翻成英文：這段本來就是英文（中文文獻裡夾的英文摘要）才跳過；德文、法文還是要翻
+    if (/^en/i.test(tgt)) {
+      if (PL.cjkRatio(text) > 0.1) return false;
+      const T = globalThis.PLTranslate;
+      return !!(T && T.guessLang && T.guessLang(text) === 'en');
+    }
+    return false;
+  };
+
+  const SHORT = { 'zh-Hant': '中', 'zh-Hans': '中', en: '英', ja: '日', ko: '韓' };
+  function dirLabel() {
+    const t = target();
+    return isCjk(t) ? '英→' + (SHORT[t] || '中') : '中→' + (SHORT[t] || '英');
+  }
+
+  function refresh() {
+    const swapped = !!(PL.settings && PL.settings.swapPanes);
+    document.documentElement.classList.toggle('pl-swap', swapped);
+    document.querySelectorAll('[data-pl-dir]').forEach((b) => {
+      b.textContent = dirLabel();
+      b.title = '翻譯方向：目前是「' + dirLabel() + '」（翻成' + ((globalThis.PL_LANG_LABEL || {})[target()] || target())
+        + '）。按一下對調，整份會重新翻譯';
+    });
+    document.querySelectorAll('[data-pl-swap]').forEach((b) => {
+      b.classList.toggle('pl-on', swapped);
+      b.title = swapped ? '左右對調中：譯文在左、原文在右。按一下換回來' : '左右對調：把譯文換到左邊、原文換到右邊';
+    });
+  }
+
+  function toggleSwap() {
+    const next = !PL.settings.swapPanes;
+    PL.settings.swapPanes = next;
+    globalThis.PL_saveSettings({ swapPanes: next });
+    refresh();
+    if (PL.Sync && PL.Sync.markDirty) PL.Sync.markDirty();
+    if (PL.Overlay && PL.Overlay.reproject) PL.Overlay.reproject();
+    PL.toast(next ? '已對調：譯文在左、原文在右' : '已換回：原文在左、譯文在右');
+  }
+
+  function toggleDirection() {
+    const cur = target();
+    const patch = {};
+    if (isCjk(cur)) { patch.lastCjkTarget = cur; patch.targetLang = 'en'; }
+    else patch.targetLang = PL.settings.lastCjkTarget || 'zh-Hant';
+    // 原文語言如果被固定成跟新的目標一樣（例如固定「英文」又要翻成英文），改回自動偵測
+    const src = PL.settings.sourceLang;
+    if (src && src !== 'auto' && (src === patch.targetLang || (/^zh/i.test(src) && /^zh/i.test(patch.targetLang)))) patch.sourceLang = 'auto';
+    Object.assign(PL.settings, patch);
+    globalThis.PL_saveSettings(patch);
+    refresh();
+    PL.toast('翻譯方向：' + dirLabel() + '，重新翻譯中…');
+    if (PL.applyTargetLang) PL.applyTargetLang();
+  }
+
+  function wire(root) {
+    (root || document).querySelectorAll('[data-pl-dir]').forEach((b) => {
+      if (b._plWired) return;
+      b._plWired = true;
+      b.addEventListener('click', toggleDirection);
+    });
+    (root || document).querySelectorAll('[data-pl-swap]').forEach((b) => {
+      if (b._plWired) return;
+      b._plWired = true;
+      b.addEventListener('click', toggleSwap);
+    });
+    refresh();
+  }
+
+  PL.Direction = {
+    refresh, wire, toggleSwap, toggleDirection, label: dirLabel,
+    makeDirButton: () => PL.el('button', { 'data-pl-dir': '1', class: 'pl-dir-btn', text: dirLabel() }),
+    makeSwapButton: () => PL.el('button', { 'data-pl-swap': '1', class: 'pl-swap-btn', text: '⇄' })
+  };
+})();

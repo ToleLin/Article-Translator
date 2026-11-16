@@ -39,6 +39,8 @@ Chrome 擴充功能。左邊原文、右邊繁體中文，**圖片、表格、�
 - **📄 原文**：在中文那邊選字，按「原文」看對應的英文原句
 - **💬 問 AI（側欄）**：選一段文字直接問 Gemini（白話解釋、重點整理、為什麼這樣做…），可以連續追問，回答可存成心得
 - **桌面版分頁**：像瀏覽器一樣一個視窗開多篇文章、點分頁切換，下次啟動自動開回上次的文件
+- **對調**：「⇄」把譯文換到左邊；「英→中／中→英」切換翻譯方向（中文文獻翻成英文）
+- **Mac 桌面版**（.dmg，Intel 與 Apple 晶片通用）
 - **查字・翻譯（側欄）**：只查一個單字或翻一句話，不動到文章；字典式顯示（音標、發音、各詞性意思、英英解釋），查過的字可收藏、匯出成生詞表
 - **Aa 譯文外觀**：工具列可以直接換字體、字色、字級
 - PDF 的參考文獻預設保留原文；修正背景翻好的頁面、縮放後的頁面字疊在一起
@@ -79,12 +81,15 @@ Chrome 每次啟動會跳一個「停用開發人員模式擴充功能」的提�
 |---|---|
 | `PaperLens-Setup-x.y.z.exe` | Windows 安裝版（建議）|
 | `PaperLens-Portable-x.y.z.exe` | Windows 免安裝版 |
+| `PaperLens-x.y.z-mac.dmg` | Mac 版（Intel 與 Apple 晶片通用）|
 | `PaperLens-Extension-x.y.z.zip` | Chrome 擴充功能的更新包 |
 
 **Windows 安裝版：自動更新。** 程式開著時會自己檢查、在背景下載新版，下載好問你要不要立刻重新啟動；選「稍後」就在下次關閉時自動安裝。也可以按「說明 → 檢查更新…」。
 （0.2.0 以前的版本沒有這個功能，請手動下載 `PaperLens-Setup` 覆蓋安裝一次，之後就會自己更新。）
 
 **Windows 免安裝版：** 有新版時會跳出提醒，按「下載新版」，把舊的 .exe 換成新的就好。
+
+**Mac 版：** 不會自動更新，有新版時會跳出提醒；下載新的 .dmg，把 PaperLens 拖進「應用程式」取代舊的。第一次開啟要到「系統設定 → 隱私權與安全性」按「仍要打開」（沒有 Apple 開發者憑證）。
 
 **Chrome 擴充功能：** 有新版時工具列圖示會出現紅色的「新」字，點開會看到更新步驟：
 1. 按「① 下載更新包」，下載 `PaperLens-Extension-x.y.z.zip` 並解壓縮
@@ -140,6 +145,7 @@ cd desktop
 npm install
 npm start          # 直接執行
 npm run dist       # 在 desktop\dist\ 產生 Setup 與 Portable 兩個 .exe（請在 Windows 上執行）
+npm run dist:mac   # 在 desktop/dist/ 產生 .dmg（請在 Mac 上執行）
 ```
 
 `npm start`／`npm run dist` 會先跑 `scripts/prepare.js`，把擴充功能的網頁檔案（`pdf/`、`shared/`、`content/`…）複製到 `desktop/app/`，所以改擴充功能的程式就等於改桌面版。

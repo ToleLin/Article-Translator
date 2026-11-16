@@ -279,6 +279,7 @@
 
     // 獨立的 Gemini 入口：貼上金鑰就能改用 Gemini 翻譯
     if (PL.makeGeminiButton) bar.appendChild(PL.makeGeminiButton());
+    if (PL.Direction) bar.appendChild(PL.Direction.makeDirButton());
 
     const btnAll = PL.el('button', { id: 'pl-translate-all', text: '翻譯全文' });
     btnAll.addEventListener('click', () => PL.translateAll());
@@ -302,6 +303,7 @@
     });
     bar.appendChild(modeWrap);
     PL.els.modeWrap = modeWrap;
+    if (PL.Direction) bar.appendChild(PL.Direction.makeSwapButton());
 
     if (PL.TextStyle) bar.appendChild(PL.TextStyle.makeButton());
 
@@ -381,6 +383,7 @@
     root.style.setProperty('--pl-trans-font', s.transFont);
     root.style.setProperty('--pl-trans-lh', String(s.transLineHeight));
     root.classList.toggle('pl-dim', !!s.dimOriginal);
+    if (PL.Direction) PL.Direction.wire();
     if (PL.TextStyle) PL.TextStyle.apply();
     if (PL.els.right) PL.els.right.style.fontSize = (s.transFontScale || 1) === 1 ? '' : (s.transFontScale * 100) + '%';
   }
@@ -407,7 +410,9 @@
 
     const onMove = (e) => {
       if (!dragging) return;
-      setRatio(e.clientX / window.innerWidth);
+      // 左右對調時原文那一欄在右邊：它的寬度是「從滑鼠到右緣」
+      const x = e.clientX / window.innerWidth;
+      setRatio(PL.settings.swapPanes ? 1 - x : x);
     };
     const onUp = () => {
       if (!dragging) return;

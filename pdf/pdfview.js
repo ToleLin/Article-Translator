@@ -178,7 +178,8 @@
       doc.pages.push(pg);
       for (const blk of lp.blocks) {
         let state = blk.skip ? 'skip' : 'pending';
-        if (state === 'pending' && PL.settings.skipChinese && PL.cjkRatio(blk.text) > 0.5) state = 'skip';
+        // 已經是目標語言的段落不用翻（翻成中文時的中文段落；翻成英文時的英文段落）
+        if (state === 'pending' && PL.settings.skipChinese && PL.alreadyTarget(blk.text)) state = 'skip';
         // 參考文獻預設保留原文（設定頁可以改成要翻）
         if (state === 'pending' && blk.ref && !PL.settings.translateRefs) state = 'skip';
         blk.idx = PL.blocks.length;
@@ -551,7 +552,9 @@
 
   /** 同一種原文字級 → 同一個譯文字級，整頁看起來才整齊；只有真的塞不下的段落才縮 */
   function targetPx(blk, scale) {
-    return blk.h * CJK_SCALE * (PL.settings.transFontScale || 1) * scale;
+    // 中文譯文縮一點才跟英文原文一樣「重」；翻成英文時不用縮（放不下會自動縮小）
+    const k = PL.isCjkLang(PL.settings.targetLang) ? CJK_SCALE : 1;
+    return blk.h * k * (PL.settings.transFontScale || 1) * scale;
   }
 
   function fillTranslation(b) {
@@ -800,6 +803,22 @@
       });
     }
   }
+
+  /** 翻譯方向換了（英→中 ⇄ 中→英）：哪些段落要翻要重新判斷，然後重新開始翻 */
+  PL.applyTargetLang = function () {
+    T.sourceLang = null;
+    langReady = null;
+    if (!doc.pdf) return;
+    resetQueue();
+    buildPages();
+    layoutPages();
+    PL.applyAllAnnotations();
+    const n = PL.blocks.filter((b) => b.state !== 'skip').length;
+    PL.setStatus('共 ' + doc.pdf.numPages + ' 頁 · ' + n + ' 段可翻譯', 0);
+    // 使用者自己按的對調：就算關掉了自動翻譯也照新的方向開始翻
+    if (!PL.settings.lazyTranslate) translateAll();
+    else { Q.started = true; updateViewport(); }
+  };
 
   let langReady = null;
   function ensureLang() {
@@ -1309,7 +1328,9 @@
     g.addEventListener('mousedown', (e) => { dragging = true; g.classList.add('pl-dragging'); e.preventDefault(); });
     window.addEventListener('mousemove', (e) => {
       if (!dragging) return;
-      const r = Math.max(0.2, Math.min(0.8, e.clientX / window.innerWidth));
+      // 左右對調時原文那一欄在右邊：它的寬度是「從滑鼠到右緣」
+      const x = e.clientX / window.innerWidth;
+      const r = Math.max(0.2, Math.min(0.8, PL.settings.swapPanes ? 1 - x : x));
       document.documentElement.style.setProperty('--pl-left-w', (r * 100) + '%');
     });
     window.addEventListener('mouseup', () => {
@@ -1630,6 +1651,8 @@
           else if (msg.command === 'sidebar') PL.toggleSidebar(undefined, 'notes');
           else if (msg.command === 'lookup') PL.toggleSidebar(undefined, 'tr');
           else if (msg.command === 'ask-ai') PL.toggleSidebar(undefined, 'ai');
+          else if (msg.command === 'swap-panes') PL.Direction.toggleSwap();
+          else if (msg.command === 'swap-direction') PL.Direction.toggleDirection();
           else if (msg.command === 'retry') PL.retryFailed();
           else if (msg.command === 'export-pdf') doExport();
           else if (msg.command === 'gemini-key') PL.openGeminiDialog();
@@ -1642,6 +1665,8 @@
           const patch = msg.patch || {};
           PL.settings = Object.assign({}, PL.settings, patch);
           // 設定頁改了外觀：馬上套用
+          if (PL.Direction && ('swapPanes' in patch || 'targetLang' in patch)) PL.Direction.refresh();
+          if ('targetLang' in patch && msg.retranslate) PL.applyTargetLang();
           if ('transFont' in patch || 'transColor' in patch || 'transFontScale' in patch) {
             document.documentElement.style.setProperty('--pl-trans-font', PL.settings.transFont);
             if (PL.TextStyle) PL.TextStyle.apply();
@@ -1727,6 +1752,7 @@
     document.documentElement.style.setProperty('--pl-left-w', (PL.settings.splitRatio * 100) + '%');
 
     wireBar();
+    if (PL.Direction) PL.Direction.wire();
     wirePanes();
     wireDrop();
     PL.wireAnnotations();

@@ -131,11 +131,14 @@ async function checkNotify() {
   if (!manual && seen && seen.version === r.version && Date.now() - seen.at < RENOTIFY) return;
   if (store) { store.updateNotice = { version: r.version, at: Date.now() }; saveSoon(); }
 
-  const dl = (PORTABLE ? r.assets.portable : r.assets.setup) || r.url;
+  const MAC = process.platform === 'darwin';
+  const dl = (MAC ? r.assets.mac : PORTABLE ? r.assets.portable : r.assets.setup) || r.url;
   const res = await box({
     type: 'info',
     message: '有新版本 ' + r.version + '（目前 ' + cur + '）',
-    detail: (PORTABLE
+    detail: (MAC
+      ? 'Mac 版沒辦法自動更新：下載新的 .dmg，打開後把 PaperLens 拖進「應用程式」取代舊的就好，註解和設定都會保留。'
+      : PORTABLE
       ? '免安裝版沒辦法自動更新：下載新的 PaperLens-Portable 換掉舊的就好，註解和設定都會保留。\n'
         + '想要自動更新的話，可以改用安裝版（PaperLens-Setup）。'
       : '下載新版安裝檔，直接執行覆蓋安裝即可，註解和設定都會保留。') + bullets(PLUpdate.highlights(r.notes, 5)),
@@ -178,7 +181,7 @@ function status() {
     downloaded,
     downloading: state.downloading,
     error: state.error,
-    mode: mode === 'auto' ? 'auto' : PORTABLE ? 'portable' : 'notify',
+    mode: mode === 'auto' ? 'auto' : process.platform === 'darwin' ? 'mac' : PORTABLE ? 'portable' : 'notify',
     url: globalThis.PLUpdate.PAGE
   };
 }

@@ -21,6 +21,8 @@
     bgTranslate: true,              // 看得到的翻完之後，在背景把整篇補完（PDF）
     syncScroll: true,
     splitRatio: 0.5,                // 左欄寬度比例
+    swapPanes: false,               // 左右對調：譯文在左、原文在右
+    lastCjkTarget: 'zh-Hant',       // 切到「中→英」之前用的譯文語言（切回來、AI 回答的語言用）
     skipChinese: true,              // 已經是中文的段落不翻
     translateRefs: false,
     askWithDoc: true,               // 問 AI 時把全文節錄一起給它當背景

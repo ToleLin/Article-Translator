@@ -786,3 +786,12 @@ html[data-pl-color] #pl-right [data-pl-done]:not(.pl-tr) :not(a):not(mark):not(c
 .pl-ai-row .pl-ai-send[disabled] { opacity: .5; cursor: default; }
 @media (prefers-color-scheme: dark) { .pl-ai-key { background: #451a03; color: #fde68a; } }
 
+/* ══════════ 對調 ══════════ */
+
+/* 左右對調：譯文在左、原文在右（只換位置） */
+html.pl-active.pl-swap #pl-left { order: 3; }
+html.pl-active.pl-swap #pl-gutter { order: 2; }
+html.pl-active.pl-swap #pl-right { order: 1; border-left: 0; border-right: 1px solid var(--pl-line); }
+#pl-bar .pl-swap-btn { font-size: 15px; line-height: 1; padding-left: 9px; padding-right: 9px; }
+#pl-bar .pl-dir-btn { font-weight: 600; white-space: nowrap; }
+

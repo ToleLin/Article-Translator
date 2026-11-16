@@ -247,7 +247,7 @@
         doc: els.doc.checked || !ctx ? docText() : '',
         title: PL.pageTitle ? PL.pageTitle() : document.title,
         history,
-        lang: PL.settings && PL.settings.targetLang
+        lang: PL.readerLang ? PL.readerLang() : (PL.settings && PL.settings.targetLang)
       });
       if (my !== tok) return;            // 中途換了段落或清除了對話
       wait.remove();

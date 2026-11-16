@@ -562,6 +562,9 @@
   function joinPieces(a, b, vocab) {
     if (!a) return b;
     if (!b) return a;
+    // 中文換行的地方不用補空白（「技術\n的發展」→「技術的發展」）
+    if (/[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff，。、；：！？）」』]$/.test(a)
+      && /^[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff，。、；：！？（「『]/.test(b)) return a + b;
     const m = /([A-Za-z]+)[-‐‑]$/.exec(a);
     const n = /^([a-z][A-Za-z]*)/.exec(b);
     if (m && n) {
@@ -584,9 +587,13 @@
   const MATH_WORDS = new Set(['sin', 'cos', 'tan', 'exp', 'log', 'max', 'min', 'lim', 'sup', 'inf',
     'det', 'arg', 'mod', 'var', 'cov', 'diag', 'tanh', 'sinh', 'cosh', 'softmax', 'argmax', 'argmin', 'mat']);
 
+  const CJK_TEXT = /[\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af]/g;
+
   function looksLikeMath(text) {
     const t = text.replace(/\s+/g, '');
     if (!t) return true;
+    // 中文、日文、韓文的句子沒有「英文單字」，不能因此當成公式（中→英時整篇都不會翻）
+    if ((t.match(CJK_TEXT) || []).length >= 2) return false;
     if (t.length <= 4 && !/[a-z]/.test(t)) return true;               // QKT、SiO、R G B 這類記號
     const words = (text.match(/[A-Za-z]{3,}/g) || []).filter((w) => !MATH_WORDS.has(w.toLowerCase()));
     if (!words.length) return true;

@@ -37,8 +37,8 @@
 
       if (!text || !/\p{L}{2,}/u.test(bare)) {
         mark(b, 'skip');
-      } else if (PL.settings.skipChinese && PL.cjkRatio(text) > 0.5) {
-        mark(b, 'skip');          // 本來就是中文，不用翻
+      } else if (PL.settings.skipChinese && PL.alreadyTarget(text)) {
+        mark(b, 'skip');          // 本來就是目標語言（中文），不用翻
       }
     }
   };
@@ -278,6 +278,26 @@
   };
 
   /** 換引擎或換語言後重翻全文；opts.noCache：不要拿快取裡舊引擎的譯文（例如改用 Gemini） */
+  /** 翻譯方向換了（英→中 ⇄ 中→英）：哪些段落要翻要重新判斷，然後整份重翻 */
+  PL.applyTargetLang = function () {
+    if (!PL.active) return;
+    queue = []; queued = new Set();
+    T.sourceLang = null;
+    PL.sourceLang = null;
+    for (const b of PL.blocks) {
+      if (!b.right || b.origHTML == null) continue;
+      b.right.innerHTML = b.origHTML;
+      b.right.removeAttribute('data-pl-done');
+      b.right.setAttribute('lang', PL.settings.targetLang);
+      b.state = 'pending';
+    }
+    PL.prepareBlocks();
+    for (const b of PL.blocks) if (b.state === 'pending') mark(b, 'pending');
+    PL.Sync.markDirty();
+    setupLazy();
+    if (!PL.settings.lazyTranslate) PL.translateAll();
+  };
+
   PL.retranslateAll = function (opts) {
     queue = []; queued = new Set();
     noCache = !!(opts && opts.noCache);

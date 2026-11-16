@@ -143,13 +143,20 @@
       const r = await withTimeout(send({ type: 'ai.detect', text: (sampleText || '').slice(0, 1200) }), 5000, '語言偵測');
       lang = r && r.lang;
     } catch (e) { /* 偵測器不能用，下面用字來猜 */ }
-    if (!lang) lang = T.guessLang(sampleText);
+    const guess = T.guessLang(sampleText);
+    if (!lang) lang = guess;
+    // 中日韓文看字就知道，偵測器說是別的語言時以字為準
+    if (guess && /^(zh|ja|ko)$/.test(guess) && lang && !/^(zh|ja|ko)/i.test(lang)) lang = guess;
     /* 網頁本身標示的語言只在一般網頁上才可信。PDF 檢視器、桌面版的 <html lang> 是「介面」的語言（zh-Hant），
        拿來當原文語言的話，翻譯引擎會把英文當中文「翻」，原封不動退回來 —— 看起來就像沒翻 */
     if (!lang && typeof location !== 'undefined' && /^https?:$/.test(location.protocol)
       && typeof document !== 'undefined' && document.documentElement && document.documentElement.lang) {
       lang = document.documentElement.lang.split('-')[0];
     }
+    // 判斷出來的原文語言跟譯文語言一樣（例如中英夾雜的文件）：不要指定，讓引擎自己逐段判斷，
+    // 不然引擎會以為「不用翻」而原封不動退回來
+    const base = (x) => String(x || '').toLowerCase().split('-')[0];
+    if (lang && base(lang) === base(s.targetLang)) lang = null;
     T.sourceLang = lang || 'auto';
     return T.sourceLang;
   };
@@ -378,8 +385,11 @@
       if (words >= 4 && cjk === 0) return 'untranslated';
       // 正常的英翻中，字數大約是原文字元數的 25%～60%；低到 12% 以下多半是只翻了一部分
       if (src.length > 160 && t.length < src.length * 0.12) return 'truncated';
-    } else if (words >= 6 && t === src.trim()) {
-      return 'untranslated';
+    } else {
+      if (words >= 6 && t === src.trim()) return 'untranslated';
+      // 中→英：原文是中文、結果大部分還是中文 → 沒翻
+      const srcCjk = (src.match(CJK_RE) || []).length;
+      if (srcCjk >= 8 && (t.match(CJK_RE) || []).length > srcCjk * 0.5) return 'untranslated';
     }
     return null;
   };

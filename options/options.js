@@ -306,6 +306,7 @@
     bindSelect('defaultHighlight');
 
     bindCheck('autoFallback');
+    bindCheck('swapPanes');
     bindCheck('skipChinese');
     bindCheck('translateRefs');
     bindCheck('autoTranslate');

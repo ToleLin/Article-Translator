@@ -508,7 +508,33 @@ function buildMenu() {
   const focused = (w) => webContents.getFocusedWebContents() || (frameFor(w) && frameFor(w).activeWC());
   const onFocused = (fn) => (m, w) => { const wc = focused(w); if (wc && !wc.isDestroyed()) fn(wc); };
   const zoomBy = (d) => onFocused((wc) => wc.setZoomLevel(d === 0 ? 0 : Math.max(-3, Math.min(5, wc.getZoomLevel() + d))));
+  const mac = process.platform === 'darwin';
+  const openSettings = () => openAux('options/options.html', { width: 900, height: 900 });
+  const about = (m, w) => dialog.showMessageBox(w || undefined, {
+    type: 'info', title: '關於 PaperLens',
+    message: 'PaperLens 文獻對照閱讀器 ' + app.getVersion(),
+    detail: '左原文、右繁中，PDF 版面原樣保留；螢光筆、手寫標註、便利貼、雙欄 PDF 匯出。\n\n'
+      + '資料（註解、翻譯快取、設定）存在：\n' + (storeFile || app.getPath('userData'))
+  });
   const template = [
+    // macOS 的第一個選單固定是「程式名稱」選單（關於、設定、隱藏、結束都放這裡）
+    ...(mac ? [{
+      label: app.name,
+      submenu: [
+        { label: '關於 PaperLens', click: about },
+        { label: '檢查更新…', click: () => updater.check(true) },
+        { type: 'separator' },
+        { label: '設定…', accelerator: 'Cmd+,', click: openSettings },
+        { type: 'separator' },
+        { role: 'services', label: '服務' },
+        { type: 'separator' },
+        { role: 'hide', label: '隱藏 PaperLens' },
+        { role: 'hideOthers', label: '隱藏其他' },
+        { role: 'unhide', label: '顯示全部' },
+        { type: 'separator' },
+        { role: 'quit', label: '結束 PaperLens' }
+      ]
+    }] : []),
     {
       label: '檔案',
       submenu: [
@@ -521,15 +547,26 @@ function buildMenu() {
         { label: '翻譯全文', accelerator: 'CmdOrCtrl+T', click: cmd('translate-all') },
         { label: '使用 Gemini 翻譯（輸入金鑰）…', accelerator: 'CmdOrCtrl+G', click: cmd('gemini-key') },
         { label: '匯出左右對照 PDF…', accelerator: 'CmdOrCtrl+E', click: cmd('export-pdf') },
-        { type: 'separator' },
-        { label: '設定…', accelerator: 'CmdOrCtrl+,', click: () => openAux('options/options.html', { width: 900, height: 900 }) },
-        { type: 'separator' },
-        { role: 'quit', label: '結束' }
+        ...(mac ? [] : [
+          { type: 'separator' },
+          { label: '設定…', accelerator: 'Ctrl+,', click: openSettings },
+          { type: 'separator' },
+          { role: 'quit', label: '結束' }
+        ])
       ]
     },
     {
       label: '編輯',
-      submenu: [
+      // macOS 用系統內建的動作（原生的開檔視窗、輸入框也要能複製貼上）；其他平台直接對游標所在的頁面下指令
+      submenu: mac ? [
+        { role: 'undo', label: '還原' },
+        { role: 'redo', label: '重做' },
+        { type: 'separator' },
+        { role: 'cut', label: '剪下' },
+        { role: 'copy', label: '拷貝' },
+        { role: 'paste', label: '貼上' },
+        { role: 'selectAll', label: '全選' }
+      ] : [
         { label: '剪下', accelerator: 'CmdOrCtrl+X', click: onFocused((wc) => wc.cut()) },
         { label: '複製', accelerator: 'CmdOrCtrl+C', click: onFocused((wc) => wc.copy()) },
         { label: '貼上', accelerator: 'CmdOrCtrl+V', click: onFocused((wc) => wc.paste()) },
@@ -541,6 +578,9 @@ function buildMenu() {
       submenu: [
         { label: '下一個分頁', accelerator: 'Ctrl+Tab', click: (m, w) => { const f = frameFor(w); if (f) f.step(1); } },
         { label: '上一個分頁', accelerator: 'Ctrl+Shift+Tab', click: (m, w) => { const f = frameFor(w); if (f) f.step(-1); } },
+        { type: 'separator' },
+        { label: '左右對調（譯文換到左邊）', accelerator: 'CmdOrCtrl+Shift+X', click: cmd('swap-panes') },
+        { label: '對調翻譯方向（英→中 ⇄ 中→英）', accelerator: 'CmdOrCtrl+Shift+D', click: cmd('swap-direction') },
         { type: 'separator' },
         { label: '註解側欄', accelerator: 'CmdOrCtrl+B', click: cmd('sidebar') },
         { label: '問 AI（側欄）', accelerator: 'CmdOrCtrl+I', click: cmd('ask-ai') },
@@ -554,12 +594,13 @@ function buildMenu() {
         { label: '放大介面文字', accelerator: 'CmdOrCtrl+Shift+=', click: zoomBy(0.5) },
         { label: '縮小介面文字', accelerator: 'CmdOrCtrl+Shift+-', click: zoomBy(-0.5) },
         { label: '介面文字實際大小', accelerator: 'CmdOrCtrl+Shift+0', click: zoomBy(0) },
-        { label: '全螢幕', accelerator: 'F11', click: (m, w) => { if (w) w.setFullScreen(!w.isFullScreen()); } },
+        { label: '全螢幕', accelerator: mac ? 'Ctrl+Cmd+F' : 'F11', click: (m, w) => { if (w) w.setFullScreen(!w.isFullScreen()); } },
         { type: 'separator' },
         { label: '重新載入', accelerator: 'CmdOrCtrl+R', click: onFocused((wc) => wc.reload()) },
         { label: '開發人員工具', accelerator: 'CmdOrCtrl+Shift+I', click: onFocused((wc) => wc.toggleDevTools()) }
       ]
     },
+    ...(mac ? [{ role: 'windowMenu', label: '視窗' }] : []),
     {
       label: '說明',
       submenu: [
@@ -568,16 +609,7 @@ function buildMenu() {
         { type: 'separator' },
         { label: '檢查更新…', click: () => updater.check(true) },
         { label: '所有版本與更新內容', click: () => shell.openExternal(REPO + '/releases') },
-        { type: 'separator' },
-        {
-          label: '關於 PaperLens',
-          click: (m, w) => dialog.showMessageBox(w || undefined, {
-            type: 'info', title: '關於 PaperLens',
-            message: 'PaperLens 文獻對照閱讀器 ' + app.getVersion(),
-            detail: '左原文、右繁中，PDF 版面原樣保留；螢光筆、手寫標註、便利貼、雙欄 PDF 匯出。\n\n'
-              + '資料（註解、翻譯快取、設定）存在：\n' + (storeFile || app.getPath('userData'))
-          })
-        }
+        ...(mac ? [] : [{ type: 'separator' }, { label: '關於 PaperLens', click: about }])
       ]
     }
   ];

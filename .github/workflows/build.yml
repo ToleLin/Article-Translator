@@ -2,6 +2,7 @@
 #
 # 每次推上來都會建置（在該次執行的「Artifacts」可以下載）：
 #   - PaperLens-Windows：安裝版、免安裝版 .exe
+#   - PaperLens-Mac：Mac 版 .dmg（Intel 與 Apple 晶片通用）
 #   - PaperLens-Extension：Chrome 擴充功能的更新包 .zip
 #
 # 版本號（manifest.json）是新的 → 自動發佈 vX.Y.Z 到 GitHub Releases：
@@ -45,6 +46,9 @@ jobs:
   build:
     name: 建置與發佈
     runs-on: windows-latest
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      release: ${{ steps.v.outputs.release }}
     steps:
       - uses: actions/checkout@v7
 
@@ -117,3 +121,42 @@ jobs:
             desktop/dist/PaperLens-Portable-${{ steps.v.outputs.version }}.exe
             desktop/dist/latest.yml
             dist/PaperLens-Extension-${{ steps.v.outputs.version }}.zip
+
+  # Mac 版在 macOS 上另外建置，建好再加到同一個發佈裡（等 Windows 那邊把發佈建好才跑）。
+  # 沒有 Apple 開發者憑證，只做本機簽章（ad-hoc）：第一次開啟要到「系統設定 → 隱私權與安全性」按「仍要打開」。
+  mac:
+    name: Mac 版
+    needs: build
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: desktop/package-lock.json
+
+      - name: 安裝建置工具
+        working-directory: desktop
+        run: npm ci
+
+      - name: 打包 Mac 版（.dmg）
+        working-directory: desktop
+        run: npm run dist:mac
+
+      - name: 上傳 Mac 版
+        uses: actions/upload-artifact@v7
+        with:
+          name: PaperLens-Mac
+          path: desktop/dist/*.dmg
+          if-no-files-found: error
+
+      - name: 加到 Releases
+        if: needs.build.outputs.release == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ needs.build.outputs.version }}
+          fail_on_unmatched_files: true
+          files: desktop/dist/PaperLens-${{ needs.build.outputs.version }}-mac.dmg
+

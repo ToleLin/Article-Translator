@@ -61,6 +61,7 @@
       if (/setup.*\.exe$/i.test(n)) assets.setup = a.browser_download_url;
       else if (/portable.*\.exe$/i.test(n)) assets.portable = a.browser_download_url;
       else if (/extension.*\.zip$/i.test(n)) assets.extension = a.browser_download_url;
+      else if (/\.dmg$/i.test(n)) assets.mac = a.browser_download_url;
     }
     return {
       version: String(j.tag_name || '').replace(/^v/i, ''),

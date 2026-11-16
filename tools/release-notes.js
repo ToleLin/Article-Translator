@@ -31,12 +31,17 @@ const body = `${section || '### 這一版更新\n- 錯誤修正與小改善'}
 |---|---|
 | \`PaperLens-Setup-${v}.exe\` | **Windows 安裝版（建議）**：之後有新版會自動更新 |
 | \`PaperLens-Portable-${v}.exe\` | Windows 免安裝版：放隨身碟也能用，有新版時會提醒你下載 |
+| \`PaperLens-${v}-mac.dmg\` | **Mac 版**（Intel 與 Apple 晶片通用）：有新版時會提醒你下載 |
 | \`PaperLens-Extension-${v}.zip\` | Chrome 擴充功能的更新包 |
 
 ### 怎麼更新
 **Windows 安裝版**：0.2.1 以後的版本會自己更新，不用做任何事。從更舊的版本更新的話，下載 \`PaperLens-Setup-${v}.exe\` 直接執行、覆蓋安裝一次就好。
 
 **Windows 免安裝版**：下載新的 \`PaperLens-Portable-${v}.exe\`，把舊的換掉。
+
+**Mac 版**：下載 \`PaperLens-${v}-mac.dmg\`，打開後把 PaperLens 拖進「應用程式」（更新時選「取代」）。
+第一次開啟會被 macOS 擋下來（因為沒有向 Apple 付費註冊）：到「系統設定 → 隱私權與安全性」往下捲，在 PaperLens 那一行按「**仍要打開**」。只需要做一次。
+（.dmg 會在 Windows 版發佈後幾分鐘才出現；還沒看到的話稍等再重新整理。）
 
 **Chrome 擴充功能**：
 1. 下載 \`PaperLens-Extension-${v}.zip\`，解壓縮

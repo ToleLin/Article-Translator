@@ -339,7 +339,9 @@
       if (eng === 'chrome') continue;                 // 內建 AI 由呼叫端自己處理
       if (eng === 'gemini' && !s.geminiApiKey) continue;
       const tgt = g.PL_mapLang(eng, msg.targetLang || s.targetLang);
-      const src = (msg.sourceLang && msg.sourceLang !== 'auto') ? g.PL_mapLang(eng, msg.sourceLang) : 'auto';
+      // 只有對照表裡有的語言才指定原文語言；自己猜出來的「zh」之類不在表裡，交給引擎自動判斷
+      const known = msg.sourceLang && msg.sourceLang !== 'auto' && (g.PL_LANG_MAP[eng] || {})[msg.sourceLang];
+      const src = known || 'auto';
       try {
         let result;
         if (eng === 'google') result = await googleTranslate(msg.texts, src, tgt);

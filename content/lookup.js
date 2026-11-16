@@ -93,10 +93,10 @@
   function direction(q) {
     const v = els.dir ? els.dir.value : 'auto';
     const rev = v === 'rev' || (v === 'auto' && hasCJK(q));
-    const tgt = (PL.settings && PL.settings.targetLang) || 'zh-Hant';
-    if (rev) return { from: /^zh|^ja|^ko/i.test(tgt) ? tgt : 'auto', to: 'en', rev: true };
-    const src = globalThis.PLTranslate && PLTranslate.sourceLang && PLTranslate.sourceLang !== 'auto' ? PLTranslate.sourceLang : 'auto';
-    return { from: src, to: tgt, rev: false };
+    // 查字一律是「外文 ↔ 自己看的語言」，不管文章目前的翻譯方向（切成中→英時，查英文字還是要顯示中文）
+    const mine = PL.readerLang ? PL.readerLang() : ((PL.settings && PL.settings.targetLang) || 'zh-Hant');
+    if (rev) return { from: mine, to: 'en', rev: true };
+    return { from: 'auto', to: mine, rev: false };
   }
 
   async function run(q, dir) {
@@ -112,7 +112,7 @@
       // 句子（或字典查不到）：用一般翻譯，照使用者設定的引擎順序
       try {
         let t, eng;
-        if (!dir.rev && globalThis.PLTranslate) {
+        if (!dir.rev && globalThis.PLTranslate && dir.to === ((PL.settings && PL.settings.targetLang) || 'zh-Hant')) {
           // 文章的原文語言還沒判斷過：只在這一次查詢用這句話猜，不要記下來（不然會影響之後整篇的翻譯）
           const T = PLTranslate, had = T.sourceLang;
           if (!had) T.sourceLang = (T.guessLang && T.guessLang(q)) || null;

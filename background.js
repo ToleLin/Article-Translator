@@ -11,6 +11,7 @@ const CONTENT_JS = [
   'shared/localai.js',
   'shared/translator.js',
   'content/core.js',
+  'content/direction.js',
   'content/split.js',
   'content/translate.js',
   'content/annotate.js',

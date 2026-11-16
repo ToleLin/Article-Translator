@@ -94,6 +94,10 @@
           } else if (msg.command === 'sidebar') {
             if (!PL.active) await PL.activate();
             PL.toggleSidebar(undefined, 'notes');
+          } else if (msg.command === 'swap-panes') {
+            if (PL.active && PL.Direction) PL.Direction.toggleSwap();
+          } else if (msg.command === 'swap-direction') {
+            if (PL.active && PL.Direction) PL.Direction.toggleDirection();
           } else if (msg.command === 'ask-ai') {
             if (!PL.active) await PL.activate();
             PL.toggleSidebar(undefined, 'ai');
@@ -109,7 +113,7 @@
           PL.settings = Object.assign({}, PL.settings, msg.patch || {});
           if (PL.active) {
             PL.applyLook();
-            if (msg.retranslate) PL.retranslateAll();
+            if (msg.retranslate) { if ('targetLang' in (msg.patch || {}) && PL.applyTargetLang) PL.applyTargetLang(); else PL.retranslateAll(); }
           }
           return { ok: true };
 
