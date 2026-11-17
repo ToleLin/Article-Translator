@@ -540,7 +540,17 @@ function buildMenu() {
       submenu: [
         { label: '開啟 PDF…', accelerator: 'CmdOrCtrl+O', click: (m, w) => openDialog(frameFor(w)) },
         { label: '新分頁', accelerator: 'CmdOrCtrl+N', click: (m, w) => (frameFor(w) || mainFrame()).addTab(null) },
-        { label: '關閉分頁', accelerator: 'CmdOrCtrl+W', click: (m, w) => { const f = frameOfWindow(w); if (f) f.closeTab(f.active); else if (w) w.close(); } },
+        {
+          label: '關閉分頁', accelerator: 'CmdOrCtrl+W',
+          click: (m, w) => {
+            // 設定頁、匯出頁這種獨立視窗：關掉那個視窗。其餘一律關目前的分頁
+            // （有些平台選單不會把視窗帶進來，所以不能只靠 w）
+            const focused = BaseWindow.getFocusedWindow() || w;
+            if (focused && !frameOfWindow(focused) && Object.values(aux).includes(focused)) { focused.close(); return; }
+            const f = frameFor(focused);
+            if (f) f.closeTab(f.active);
+          }
+        },
         { label: '新視窗', accelerator: 'CmdOrCtrl+Shift+N', click: () => new TabFrame().addTab(null) },
         { role: 'recentDocuments', label: '最近開啟' },
         { type: 'separator' },
