@@ -134,6 +134,13 @@
 
     const n = PL.blocks.filter((b) => b.state !== 'skip').length;
     PL.setStatus('共 ' + doc.pdf.numPages + ' 頁 · ' + n + ' 段可翻譯', 0);
+    // 幾乎沒有東西可翻、而且是因為文件本來就是譯文語言（例如方向還停在「中→英」卻開了英文論文）：提醒一下
+    const sameLang = PL.blocks.filter((b) => b.state === 'skip' && !b.para.skip && !b.para.ref).length;
+    if (PL.Direction && sameLang >= 5 && n < (n + sameLang) * 0.15) {
+      const lbl = (globalThis.PL_LANG_LABEL || {})[PL.settings.targetLang] || PL.settings.targetLang;
+      PL.toast('這份文件看起來已經是' + lbl + '，照目前的翻譯方向（' + PL.Direction.label() + '）沒有東西可以翻。\n'
+        + '要翻成另一種語言，請按工具列的「翻譯 ' + PL.Direction.label() + '」。', 9000);
+    }
 
     T.prewarm();
     updateViewport();
@@ -168,6 +175,7 @@
     doc.layout = res;
     doc.pages = [];
     PL.blocks = [];
+    if (PL.setDocLang) PL.setDocLang(res.pages.slice(0, 4).map((lp) => lp.blocks.map((b) => b.text).join(' ')).join(' '));
 
     res.pages.forEach((lp, k) => {
       const pg = {
@@ -1753,6 +1761,7 @@
 
     wireBar();
     if (PL.Direction) PL.Direction.wire();
+    if (PL.watchBarHeight) PL.watchBarHeight($('pl-bar'));
     wirePanes();
     wireDrop();
     PL.wireAnnotations();

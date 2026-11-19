@@ -104,10 +104,11 @@ html.pl-active.pl-only-src #pl-gutter { display: none !important; }
 #pl-bar {
   position: fixed !important;
   top: 0; left: 0; right: 0;
-  height: var(--pl-bar-h);
+  /* 放不下就換成兩排：每一顆按鈕都要看得到、按得到（實際高度由 PL.watchBarHeight 寫回 --pl-bar-h） */
+  min-height: 44px;
   z-index: 2147483600;
-  display: flex; align-items: center; gap: 6px;
-  padding: 0 10px;
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px; row-gap: 5px;
+  padding: 6px 10px;
   box-sizing: border-box;
   background: var(--pl-panel);
   border-bottom: 1px solid var(--pl-line);
@@ -139,15 +140,16 @@ html.pl-active.pl-only-src #pl-gutter { display: none !important; }
 #pl-bar .pl-modes { display: inline-flex; gap: 4px; flex: 0 0 auto; }
 #pl-bar > * { flex: 0 0 auto; }
 
-/* 視窗變窄時先犧牲進度條與字樣，但絕不換行擠成兩排 */
+/* 視窗變窄時先收起進度條與字樣；還是放不下就換成兩排 */
 @media (max-width: 1120px) {
   #pl-bar .pl-prog { display: none; }
 }
 @media (max-width: 900px) {
   #pl-bar .pl-status { display: none; }
-  #pl-bar { gap: 4px; padding: 0 6px; }
+  #pl-bar { gap: 4px; padding: 5px 6px; }
   #pl-bar button, #pl-bar select { padding: 5px 7px; }
 }
+#pl-bar select { max-width: 170px; }
 
 #pl-bar .pl-status { color: var(--pl-muted); font-size: 12px; white-space: nowrap; }
 #pl-bar .pl-prog {
@@ -792,6 +794,6 @@ html[data-pl-color] #pl-right [data-pl-done]:not(.pl-tr) :not(a):not(mark):not(c
 html.pl-active.pl-swap #pl-left { order: 3; }
 html.pl-active.pl-swap #pl-gutter { order: 2; }
 html.pl-active.pl-swap #pl-right { order: 1; border-left: 0; border-right: 1px solid var(--pl-line); }
-#pl-bar .pl-swap-btn { font-size: 15px; line-height: 1; padding-left: 9px; padding-right: 9px; }
+#pl-bar .pl-swap-btn { white-space: nowrap; }
 #pl-bar .pl-dir-btn { font-weight: 600; white-space: nowrap; }
 

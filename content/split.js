@@ -353,6 +353,7 @@
     bar.style.overflowX = 'auto';
     document.documentElement.appendChild(bar);
     PL.els.bar = bar;
+    if (PL.watchBarHeight) PL.watchBarHeight(bar);
     setMode('both');
   }
 
@@ -546,6 +547,7 @@
     if (PL.els.right) PL.els.right.removeEventListener('scroll', onRight);
     if (PL._resizeCleanup) PL._resizeCleanup();
     if (PL._gutterCleanup) PL._gutterCleanup();
+    if (PL.watchBarHeight) PL.watchBarHeight(null);
     if (ro) { ro.disconnect(); ro = null; }
   }
 

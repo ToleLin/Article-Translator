@@ -175,9 +175,7 @@ html.pl-active #pl-right.pl-pane { overflow-x: auto !important; }
 #pl-bar .pl-pageno { font-size: 12px; color: var(--pl-muted); white-space: nowrap; }
 
 /* 工具列變窄時先收掉次要的東西；縮放按鈕一直留著 */
-#pl-bar { overflow-x: auto; scrollbar-width: none; }
-#pl-bar::-webkit-scrollbar { display: none; }
-#pl-bar .pl-status { max-width: 24vw; overflow: hidden; text-overflow: ellipsis; }
+#pl-bar .pl-status { max-width: 20vw; overflow: hidden; text-overflow: ellipsis; }
 @media (max-width: 1500px) { #pl-bar .pl-brand { display: none; } }
 @media (max-width: 1380px) { #pl-bar .pl-prog { display: none; } }
 @media (max-width: 1240px) { #pl-bar .pl-pageno { display: none; } }

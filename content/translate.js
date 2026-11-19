@@ -25,6 +25,7 @@
   /* ══════════ 準備 ══════════ */
 
   PL.prepareBlocks = function () {
+    if (PL.setDocLang) PL.setDocLang(PL.blocks.slice(0, 40).map((b) => (b.left ? b.left.textContent : '')).join(' '));
     for (const b of PL.blocks) {
       const { text, atoms } = PL.atomize(b.right);
       b.srcText = text;

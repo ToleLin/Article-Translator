@@ -98,6 +98,27 @@
     return u.origin + u.pathname + (u.search || '');
   };
 
+  /* 工具列放不下時會換成兩排。下面的版面（兩欄、側欄、提示）都是用 --pl-bar-h 算位置，
+     所以工具列實際多高，就把這個值改成多高。 */
+  let barRO = null;
+  PL.watchBarHeight = function (bar) {
+    if (barRO) { barRO.disconnect(); barRO = null; }
+    const root = document.documentElement;
+    if (!bar) { root.style.removeProperty('--pl-bar-h'); return; }
+    let last = 0;
+    const sync = () => {
+      const h = Math.ceil(bar.getBoundingClientRect().height);
+      if (!h || h === last) return;
+      last = h;
+      root.style.setProperty('--pl-bar-h', h + 'px');
+      if (PL.Sync && PL.Sync.markDirty) PL.Sync.markDirty();
+      if (PL.Overlay && PL.Overlay.reproject) PL.Overlay.reproject();
+    };
+    sync();
+    if (typeof ResizeObserver !== 'undefined') { barRO = new ResizeObserver(sync); barRO.observe(bar); }
+    else window.addEventListener('resize', sync);
+  };
+
   PL.pageTitle = function () {
     const h1 = document.querySelector('h1');
     const t = (h1 && h1.textContent.trim()) || document.title || '';
